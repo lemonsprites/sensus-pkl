@@ -10,7 +10,6 @@ const TAB_WHERE: Record<DashboardTab, SensusWhereInput> = {
       { status: "TIDAK_DITEMUKAN", diverifikasiAt: null },
     ],
   },
-  PERLU_INPUT_SIMAN: { isTemuanBaru: true },
   PERLU_CETAK: { status: "VALIDATED", labelPrintedAt: null, isTemuanBaru: false },
   PERLU_TEMPEL: {
     status: "VALIDATED",

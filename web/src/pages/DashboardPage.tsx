@@ -24,7 +24,6 @@ import type { DashboardResponse, DashboardTab } from "@/lib/types";
 const TABS: Array<[DashboardTab, string]> = [
   ["PERLU_DOKUMEN", "Perlu Dokumen"],
   ["PERLU_VERIFIKASI", "Perlu Verifikasi"],
-  ["PERLU_INPUT_SIMAN", "Perlu Input SIMAN"],
   ["PERLU_CETAK", "Perlu Cetak"],
   ["PERLU_TEMPEL", "Perlu Tempel"],
 ];
@@ -125,7 +124,7 @@ export default function DashboardPage() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {TABS.map(([value, label]) => (
           <button
             key={value}

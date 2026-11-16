@@ -83,11 +83,10 @@ Setelah import pertama:
 
 ```bash
 npm run seed:ruang -- --dry-run   # validasi mapping bangunan
-npm run seed:ruang                # upsert 65 ruang + 11 ruang virtual
+npm run seed:ruang                # upsert 65 ruang + 1 ruang global
 ```
 
-Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Ruang virtual:
-- `PREFIX.00.00` per gedung (tempat aset gedung yang belum punya kode ruang),
+Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Satu ruang virtual global:
 - `TANPA.00.00.00` global untuk aset tanpa petunjuk gedung (mayoritas 6xx).
 
 ## 7. Alur sensus
@@ -96,7 +95,7 @@ Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Ruang virtual:
 2. Isi jumlah/kondisi → **Simpan & Tandai Diperiksa** (ASSESSED).
 3. Upload minimal 1 foto → status **DOCS_COMPLETE** otomatis.
 4. ADMIN/SUPERADMIN verifikasi → **VALIDATED** (TIDAK_DITEMUKAN bypass, wajib catatan).
-5. **Dashboard** 5 tab: Perlu Dokumen, Perlu Verifikasi, Perlu Input SIMAN, Perlu Cetak, Perlu Tempel.
+5. **Dashboard** 4 tab: Perlu Dokumen, Perlu Verifikasi, Perlu Cetak, Perlu Tempel.
 6. **Label**: gate ketat NUP valid + unik per kode barang + aktif + satker cocok + VALIDATED + bukan temuan baru. QR = Kode Register SIMAN.
 7. **Scan**: masukkan Kode Register untuk verifikasi aset/ruang/status/gate.
 

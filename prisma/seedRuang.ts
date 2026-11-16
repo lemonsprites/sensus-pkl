@@ -117,7 +117,7 @@ async function main(): Promise<void> {
 
   if (dryRun) {
     console.log(
-      `[seed:ruang] dry-run: akan membuat/memperbarui ${groups.size} ruang virtual per gedung + 1 fallback TANPA.00.00.00.`,
+      "[seed:ruang] dry-run: akan membuat/memperbarui 1 ruang global TANPA.00.00.00.",
     );
     console.log("[seed:ruang] dry-run selesai — tidak ada perubahan.");
     return;
@@ -128,11 +128,8 @@ async function main(): Promise<void> {
   let virtualCreated = 0;
   let virtualUpdated = 0;
 
+  // Hanya satu ruang virtual global; ruang virtual per gedung tidak dipakai.
   const desiredVirtualCodes = new Set<string>(["TANPA.00.00.00"]);
-  for (const group of groups.values()) {
-    const prefix = group.rows[0]?.kode_ruangan.split(".").slice(0, 2).join(".") ?? "";
-    if (prefix) desiredVirtualCodes.add(`${prefix}.00.00`);
-  }
 
   await prisma.$transaction(async (tx) => {
     for (const group of groups.values()) {
@@ -157,32 +154,6 @@ async function main(): Promise<void> {
           await tx.ruang.create({ data: { kode, ...data } });
           created += 1;
         }
-      }
-    }
-
-    // Ruang virtual per gedung: {PREFIX}.00.00.00 → untuk aset di gedung itu
-    // yang belum punya kode ruangan.
-    for (const group of groups.values()) {
-      const building = group.building;
-      if (!building) continue;
-      const prefix = group.rows[0]?.kode_ruangan.split(".").slice(0, 2).join(".") ?? "";
-      if (!prefix) continue;
-      const kode = `${prefix}.00.00`;
-      const data = {
-        kodeRegister: null,
-        nama: "TANPA RUANGAN",
-        tipeRuang: "TANPA RUANGAN",
-        lantai: 0,
-        urutan: 0,
-        bangunanAsetId: building.id,
-      };
-      const existing = await tx.ruang.findUnique({ where: { kode }, select: { id: true } });
-      if (existing) {
-        await tx.ruang.update({ where: { kode }, data });
-        virtualUpdated += 1;
-      } else {
-        await tx.ruang.create({ data: { kode, ...data } });
-        virtualCreated += 1;
       }
     }
 

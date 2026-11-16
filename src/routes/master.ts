@@ -144,7 +144,7 @@ masterRouter.post(
   },
 );
 
-/** M7 — dashboard 5 tab. */
+/** M7 — dashboard 4 tab. */
 masterRouter.get(
   "/dashboard",
   requireRole("ADMIN", "SUPERADMIN"),

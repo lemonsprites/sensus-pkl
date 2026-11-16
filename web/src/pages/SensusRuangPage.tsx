@@ -88,7 +88,6 @@ function SensusForm({
   const [jumlah, setJumlah] = useState(existing?.jumlahFisik?.toString() ?? "");
   const [kondisi, setKondisi] = useState<Kondisi | "">(existing?.kondisi ?? "");
   const [statusMatch, setStatusMatch] = useState<StatusMatch | "">(existing?.statusMatch ?? "");
-  const [isTemuanBaru, setIsTemuanBaru] = useState(existing?.isTemuanBaru ?? false);
   const [docsNote, setDocsNote] = useState(existing?.docsNote ?? "");
   const [catatan, setCatatan] = useState(existing?.catatan ?? "");
   const [saving, setSaving] = useState(false);
@@ -118,7 +117,6 @@ function SensusForm({
           jumlahFisik: jumlah.trim() === "" ? null : Number(jumlah),
           kondisi: kondisi === "" ? null : kondisi,
           statusMatch: statusMatch === "" ? null : statusMatch,
-          isTemuanBaru,
           docsNote: docsNote.trim() === "" ? null : docsNote,
           catatan: catatan.trim() === "" ? null : catatan,
         },
@@ -215,10 +213,10 @@ function SensusForm({
             >
               <option value="">— pilih —</option>
               {Object.entries(KONDISI_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </Select>
           </div>
           <div className="space-y-2">
@@ -229,24 +227,16 @@ function SensusForm({
               onChange={(event) => setStatusMatch(event.target.value as StatusMatch | "")}
             >
               <option value="">— pilih —</option>
-              {Object.entries(STATUS_MATCH_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(STATUS_MATCH_LABEL)
+                .filter(([value]) => value !== "TEMUAN_BARU")
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </Select>
           </div>
         </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={isTemuanBaru}
-            onChange={(event) => setIsTemuanBaru(event.target.checked)}
-            className="size-4"
-          />
-          Temuan baru (tidak ada di master SIMAN — tidak akan dilabeli)
-        </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -708,9 +698,6 @@ export default function SensusRuangPage() {
                               {asset.sensus.jumlahFisik ?? "—"} ·{" "}
                               {asset.sensus.kondisi ? KONDISI_LABEL[asset.sensus.kondisi] : "—"}
                             </span>
-                          )}
-                          {asset.sensus?.isTemuanBaru && (
-                            <Badge variant="destructive">temuan baru</Badge>
                           )}
                         </div>
                       </TableCell>

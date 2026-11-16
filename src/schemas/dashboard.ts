@@ -3,7 +3,6 @@ import { z } from "zod";
 export const dashboardTabSchema = z.enum([
   "PERLU_DOKUMEN",
   "PERLU_VERIFIKASI",
-  "PERLU_INPUT_SIMAN",
   "PERLU_CETAK",
   "PERLU_TEMPEL",
 ]);

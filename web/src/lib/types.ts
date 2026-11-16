@@ -217,7 +217,6 @@ export interface DokumenListResponse {
 export type DashboardTab =
   | "PERLU_DOKUMEN"
   | "PERLU_VERIFIKASI"
-  | "PERLU_INPUT_SIMAN"
   | "PERLU_CETAK"
   | "PERLU_TEMPEL";
 
