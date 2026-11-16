@@ -2,12 +2,9 @@ import { z } from "zod";
 
 const uuid = (label: string) => z.string().uuid(`${label} tidak valid`);
 
-export const dokumenListParamSchema = z.object({
-  barangLamaId: uuid("ID aset"),
-});
-
+export const dokumenListParamSchema = z.object({ id: uuid("ID grup sensus") });
 export const dokumenIdParamSchema = z.object({
-  barangLamaId: uuid("ID aset"),
+  id: uuid("ID grup sensus"),
   dokumenId: uuid("ID dokumen"),
 });
 

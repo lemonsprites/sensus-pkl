@@ -1,11 +1,8 @@
 // ============================================================================
-// SENSUS ASET BMN — Prisma schema
-// Acuan: agent-brief v1 §5 + Patch A (NUP composite), Patch B (hierarki tree),
-// Patch C (import staging Redis + MinIO).
-//
-// CATATAN: model User/Sensus/EditHistory masih provisional (brief v1 §5 belum
-// tersedia di repo). Field ditandai TODO(v1) — sesuaikan saat brief masuk.
-// Yang WAJIB tidak diubah tanpa patch: kodeSiman BUKAN @unique global.
+// SENSUS ASET BMN — Prisma schema (MasterAset + SensusGrup)
+// MasterAset = snapshot SSOT dari Excel/SIMAN; tidak diubah oleh sensus.
+// SensusGrup = baris input mahasiswa (ruang + kode barang + kondisi + jumlah).
+// Sensus = satu baris per NUP hasil alokasi.
 // ============================================================================
 
 generator client {
@@ -17,23 +14,18 @@ datasource db {
   provider = "postgresql"
 }
 
-// ── Enums ───────────────────────────────────────────────────────────────────
-
 enum Role {
   MAHASISWA
   ADMIN
   SUPERADMIN
 }
 
-/// Status sinkronisasi baris BarangLama terhadap snapshot SIMAN terakhir.
 enum SyncStatus {
   SNAPSHOT_AWAL
   TERSINKRON
   HILANG_DI_SIMAN
 }
 
-/// State machine sensus: DRAFT → ASSESSED → DOCS_COMPLETE → VALIDATED.
-/// TIDAK_DITEMUKAN adalah jalur bypass (tidak perlu foto, wajib docsNote).
 enum SensusStatus {
   DRAFT
   ASSESSED
@@ -42,29 +34,23 @@ enum SensusStatus {
   TIDAK_DITEMUKAN
 }
 
-/// TODO(v1 §5): konfirmasi nilai enum kondisi fisik.
 enum Kondisi {
   BAIK
   RUSAK_RINGAN
   RUSAK_BERAT
 }
 
-/// Jenis dokumen pendukung sensus.
-enum JenisDokumen {
-  FOTO
-  DOKUMEN
-}
-
-/// TODO(v1 §5): konfirmasi nilai statusMatch.
 enum StatusMatch {
   COCOK
   TIDAK_COCOK
   TEMUAN_BARU
 }
 
-// ── User ────────────────────────────────────────────────────────────────────
+enum JenisDokumen {
+  FOTO
+  DOKUMEN
+}
 
-/// TODO(v1 §5): field User provisional; dipakai M2 (login + manajemen user).
 model User {
   id           String   @id @default(uuid())
   nama         String
@@ -72,106 +58,118 @@ model User {
   passwordHash String
   role         Role     @default(MAHASISWA)
   isActive     Boolean  @default(true)
-  /// Dinaikkan saat logout/reset password/deactivate → token lama invalid.
   tokenVersion Int      @default(0)
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  sensusDiinput     Sensus[]      @relation("SensusDiinput")
-  sensusDiverifikasi Sensus[]     @relation("SensusDiverifikasi")
-  editHistory       EditHistory[]
-  dokumenUpload     SensusDokumen[] @relation("DokumenUpload")
+  sensusDiinput      Sensus[]        @relation("SensusDiinput")
+  sensusDiverifikasi Sensus[]        @relation("SensusDiverifikasi")
+  editHistory        EditHistory[]
+  dokumenUpload      SensusDokumen[] @relation("DokumenUpload")
+  sensusGrupDibuat   SensusGrup[]    @relation("GrupDibuat")
 
   @@index([role, isActive])
 }
 
-// ── Master SIMAN (Patch A + Patch B) ────────────────────────────────────────
+/// Snapshot master dari Excel/SIMAN. Sumber referensi untuk mapping NUP.
+model MasterAset {
+  id            String  @id @default(uuid())
+  /// NUP SIMAN (urutan per kodeBarang).
+  kodeSiman     String?
+  /// Kode Register SIMAN (unik, isi QR).
+  kodeRegister  String? @unique
+  kodeBarang    String?
+  nama          String
+  kategori      String?
 
-/// Snapshot baris SIMAN. Sumber kebenaran NUP tetap SIMAN v2.
-/// Patch A: NUP (kodeSiman) TIDAK unik global → unique komposit.
-model BarangLama {
-  id         String  @id @default(uuid())
-  /// NUP SIMAN. Nullable: baris tanpa NUP tetap boleh masuk.
-  kodeSiman  String?
-  /// Kode Register SIMAN (kolom BX export). Unik — dipakai sebagai isi QR label.
-  /// Terverifikasi 19.976/19.976 baris terisi & unik pada master_aset.xlsx.
-  kodeRegister String? @unique
-  /// 3xx (tanah) | 4xx (bangunan) | 5xx (peralatan).
-  kodeBarang String?
-  nama       String
-  kategori   String? // "Tanah" | "Bangunan" | "Peralatan"
-
-  // Hierarki aset (Patch B): tanah → bangunan.
-  parentAset   BarangLama?  @relation("HierarkiAset", fields: [parentAsetId], references: [id])
+  /// Hierarki aset (tanah → bangunan).
+  parentAset   MasterAset?  @relation("HierarkiAset", fields: [parentAsetId], references: [id])
   parentAsetId String?
-  childAset    BarangLama[] @relation("HierarkiAset")
+  childAset    MasterAset[] @relation("HierarkiAset")
 
-  // Lokasi peralatan (Patch B).
-  ruang   Ruang?  @relation("AsetDiRuang", fields: [ruangId], references: [id])
-  ruangId String?
-
-  // Field SIMAN lain (v1 §5).
+  /// Field SIMAN yang dinormalisasi (subset; semua kolom asli ada di dataMentah).
   kodeSatker     String?
   jumlahLama     Int       @default(1)
   merk           String?
   noSeri         String?
   tahun          Int?
   nilaiPerolehan Decimal?  @db.Decimal(14, 2)
-  lokasiSiman    String?
   kondisiSiman   String?
   statusAset     String?
   syncStatus     SyncStatus @default(SNAPSHOT_AWAL)
   snapshotAt     DateTime?
   lastSyncAt     DateTime?
   catatan        String?
+  /// SELURUH kolom Excel asli: [{ header, value, column }].
+  dataMentah     Json?
 
-  sensus     Sensus?
-  /// Bangunan ini dipakai sebagai lokasi Ruang (Patch B).
-  ruangAnak  Ruang[]   @relation("RuangBangunan")
-  createdAt  DateTime  @default(now())
+  sensus    Sensus?
+  ruangAnak Ruang[]   @relation("RuangBangunan")
+  createdAt DateTime  @default(now())
 
-  // Patch A: NUP hanya unik per kode barang.
   @@unique([kodeBarang, kodeSiman])
   @@index([kodeSiman])
   @@index([nama])
   @@index([parentAsetId])
-  @@index([ruangId])
 }
 
-/// Ruang flat + hierarki lokasi (Patch B): bangunanAsetId wajib, lantai Int.
 model Ruang {
-  id       String  @id @default(uuid())
-  kode     String  @unique // LAB.01.01.01 | auto-generated {PREFIX}.{LANTAI}.{URUT}
-  /// Kode Register SIMAN ruangan (kolom G ruangan.xlsx). Unik — isi QR ruangan.
-  kodeRegister String? @unique
-  nama     String
-  tipeRuang String?
-  luas     Decimal? @db.Decimal(10, 2)
-  pic      String?
+  id            String   @id @default(uuid())
+  kode          String   @unique
+  kodeRegister  String?  @unique
+  nama          String
+  tipeRuang     String?
+  luas          Decimal? @db.Decimal(10, 2)
+  pic           String?
 
-  bangunanAset   BarangLama @relation("RuangBangunan", fields: [bangunanAsetId], references: [id])
+  bangunanAset   MasterAset @relation("RuangBangunan", fields: [bangunanAsetId], references: [id])
   bangunanAsetId String
   lantai         Int
   urutan         Int        @default(0)
 
-  aset      BarangLama[] @relation("AsetDiRuang")
-  sensus    Sensus[]
-  createdAt DateTime    @default(now())
+  sensus Sensus[]
+  grup   SensusGrup[]
+  createdAt DateTime @default(now())
 
   @@unique([bangunanAsetId, lantai, kode])
   @@index([bangunanAsetId, lantai])
 }
 
-// ── Sensus ──────────────────────────────────────────────────────────────────
+/// Satu baris input mahasiswa: aset X dengan kondisi Y sebanyak N.
+model SensusGrup {
+  id              String       @id @default(uuid())
+  ruangId         String
+  ruang           Ruang        @relation(fields: [ruangId], references: [id], onDelete: Cascade)
+  kodeBarang      String
+  namaBarang      String
+  kondisi         Kondisi
+  jumlah          Int
+  status          SensusStatus @default(ASSESSED)
+  docsComplete    Boolean      @default(false)
+  catatan         String?
+  catatanOtomatis String?
+  createdById     String
+  createdBy       User         @relation("GrupDibuat", fields: [createdById], references: [id])
 
-/// TODO(v1 §5): model Sensus provisional (M4–M7).
+  sensus  Sensus[]
+  dokumen SensusDokumen[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ruangId, kodeBarang])
+  @@index([status])
+}
+
+/// Satu baris per NUP (aset fisik) hasil alokasi grup.
 model Sensus {
-  id           String       @id @default(uuid())
-  barangLamaId String       @unique
-  barangLama   BarangLama   @relation(fields: [barangLamaId], references: [id])
+  id           String     @id @default(uuid())
+  masterAsetId String     @unique
+  masterAset   MasterAset @relation(fields: [masterAsetId], references: [id])
+  grupId       String?
+  grup         SensusGrup? @relation(fields: [grupId], references: [id], onDelete: SetNull)
   ruangId      String?
-  ruang        Ruang?       @relation(fields: [ruangId], references: [id])
+  ruang        Ruang?     @relation(fields: [ruangId], references: [id])
 
   status       SensusStatus @default(DRAFT)
   jumlahFisik  Int?
@@ -179,9 +177,7 @@ model Sensus {
   statusMatch  StatusMatch?
   isTemuanBaru Boolean      @default(false)
   docsComplete Boolean      @default(false)
-  /// Wajib untuk TIDAK_DITEMUKAN.
   docsNote     String?
-  /// M8: kapan label dicetak vs ditempel.
   labelPrintedAt DateTime?
   labelAppliedAt DateTime?
   catatan      String?
@@ -200,10 +196,9 @@ model Sensus {
   @@index([status])
   @@index([statusMatch])
   @@index([ruangId])
-  @@index([barangLamaId])
+  @@index([grupId])
 }
 
-/// TODO(v1 §5): jejak edit setelah VALIDATED (reset ke ASSESSED).
 model EditHistory {
   id        String   @id @default(uuid())
   sensusId  String
@@ -218,9 +213,6 @@ model EditHistory {
   @@index([sensusId, createdAt])
 }
 
-// ── Import SIMAN (Patch C) ──────────────────────────────────────────────────
-
-/// Postgres hanya menyimpan audit batch. Staging row ada di Redis + MinIO.
 model ImportBatch {
   id          String    @id @default(uuid())
   filename    String
@@ -230,9 +222,10 @@ model ImportBatch {
   inserted    Int       @default(0)
   updated     Int       @default(0)
   skipped     Int       @default(0)
-  /// Maks 100 error pertama.
   errors      Json?
-  status      String    @default("PREVIEW") // PREVIEW | COMMITTED | CANCELLED
+  /// Daftar header asli Excel (untuk audit tidak ada kolom hilang).
+  headers     Json?
+  status      String    @default("PREVIEW")
   importedBy  String
   committedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -240,11 +233,12 @@ model ImportBatch {
   @@index([status, createdAt])
 }
 
-/// Dokumen pendukung per sensus (foto & dokumen).
 model SensusDokumen {
   id           String       @id @default(uuid())
-  sensusId     String
-  sensus       Sensus       @relation(fields: [sensusId], references: [id], onDelete: Cascade)
+  sensusId     String?
+  sensus       Sensus?      @relation(fields: [sensusId], references: [id], onDelete: Cascade)
+  grupId       String?
+  grup         SensusGrup?  @relation(fields: [grupId], references: [id], onDelete: Cascade)
   jenis        JenisDokumen @default(FOTO)
   bucket       String
   objectKey    String       @unique
@@ -256,4 +250,5 @@ model SensusDokumen {
   createdAt    DateTime     @default(now())
 
   @@index([sensusId, jenis])
+  @@index([grupId, jenis])
 }

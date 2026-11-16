@@ -11,7 +11,6 @@ import { ApiError } from "../utils/apiError.js";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 const PRESIGN_SECONDS = 15 * 60;
-
 type Jenis = "FOTO" | "DOKUMEN";
 
 function bucketFor(jenis: Jenis): string {
@@ -37,15 +36,13 @@ function validateContent(jenis: Jenis, contentType: string): void {
   }
 }
 
-async function getSensus(barangLamaId: string) {
-  const sensus = await prisma.sensus.findUnique({
-    where: { barangLamaId },
+async function getGrup(grupId: string) {
+  const group = await prisma.sensusGrup.findUnique({
+    where: { id: grupId },
     select: { id: true, status: true, docsComplete: true },
   });
-  if (!sensus) {
-    throw ApiError.badRequest("Simpan hasil sensus dulu sebelum upload dokumen pendukung");
-  }
-  return sensus;
+  if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
+  return group;
 }
 
 async function presignGet(bucket: string, key: string): Promise<string> {
@@ -67,7 +64,6 @@ async function serialize(doc: {
     presignGet(doc.bucket, doc.objectKey),
     doc.thumbKey ? presignGet(BUCKETS.thumb, doc.thumbKey) : Promise.resolve(null),
   ]);
-
   return {
     id: doc.id,
     jenis: doc.jenis,
@@ -80,21 +76,19 @@ async function serialize(doc: {
   };
 }
 
-async function makeThumbnail(sensusId: string, bucket: string, key: string): Promise<string | null> {
+async function makeThumbnail(grupId: string, bucket: string, key: string): Promise<string | null> {
   try {
     const stream = (await minio.getObject(bucket, key)) as Readable;
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
     }
-
     const output = await sharp(Buffer.concat(chunks))
       .rotate()
       .resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 75 })
       .toBuffer();
-
-    const thumbKey = `thumb/${sensusId}/${randomUUID()}.jpg`;
+    const thumbKey = `thumb/${grupId}/${randomUUID()}.jpg`;
     await minio.putObject(BUCKETS.thumb, thumbKey, output, output.length, {
       "Content-Type": "image/jpeg",
     });
@@ -105,45 +99,50 @@ async function makeThumbnail(sensusId: string, bucket: string, key: string): Pro
   }
 }
 
-/** ASSESSED + minimal 1 foto → DOCS_COMPLETE; foto habis → kembali ASSESSED. */
-async function syncDocsComplete(sensusId: string): Promise<void> {
-  const sensus = await prisma.sensus.findUnique({
-    where: { id: sensusId },
+/** Foto grup → DOCS_COMPLETE untuk seluruh NUP dalam grup. */
+async function syncDocsComplete(grupId: string): Promise<void> {
+  const group = await prisma.sensusGrup.findUnique({
+    where: { id: grupId },
     select: { status: true },
   });
-  if (!sensus) return;
+  if (!group) return;
 
   const fotoCount = await prisma.sensusDokumen.count({
-    where: { sensusId, jenis: "FOTO" },
+    where: { grupId, jenis: "FOTO" },
   });
 
-  if (sensus.status === "ASSESSED" && fotoCount > 0) {
-    await prisma.sensus.update({
-      where: { id: sensusId },
-      data: { status: "DOCS_COMPLETE", docsComplete: true },
-    });
-  } else if (sensus.status === "DOCS_COMPLETE" && fotoCount === 0) {
-    await prisma.sensus.update({
-      where: { id: sensusId },
-      data: { status: "ASSESSED", docsComplete: false },
-    });
+  if (group.status === "ASSESSED" && fotoCount > 0) {
+    await prisma.$transaction([
+      prisma.sensusGrup.update({
+        where: { id: grupId },
+        data: { status: "DOCS_COMPLETE", docsComplete: true },
+      }),
+      prisma.sensus.updateMany({
+        where: { grupId },
+        data: { status: "DOCS_COMPLETE", docsComplete: true },
+      }),
+    ]);
+  } else if (group.status === "DOCS_COMPLETE" && fotoCount === 0) {
+    await prisma.$transaction([
+      prisma.sensusGrup.update({
+        where: { id: grupId },
+        data: { status: "ASSESSED", docsComplete: false },
+      }),
+      prisma.sensus.updateMany({
+        where: { grupId },
+        data: { status: "ASSESSED", docsComplete: false },
+      }),
+    ]);
   }
 }
 
-export async function presignUpload(
-  actorId: string,
-  barangLamaId: string,
-  input: DokumenPresignInput,
-) {
-  void actorId;
-  const sensus = await getSensus(barangLamaId);
+export async function presignUpload(grupId: string, input: DokumenPresignInput) {
+  const group = await getGrup(grupId);
   validateContent(input.jenis, input.contentType);
-
   const bucket = bucketFor(input.jenis);
   const ext = extensionFor(input.filename, input.contentType);
-  const objectKey = `sensus/${sensus.id}/${randomUUID()}.${ext}`;
+  const objectKey = `grup/${group.id}/${randomUUID()}.${ext}`;
   const uploadUrl = await minioPresign.presignedPutObject(bucket, objectKey, PRESIGN_SECONDS);
-
   return {
     uploadUrl,
     method: "PUT" as const,
@@ -155,16 +154,11 @@ export async function presignUpload(
   };
 }
 
-export async function confirmUpload(
-  actorId: string,
-  barangLamaId: string,
-  input: DokumenConfirmInput,
-) {
-  const sensus = await getSensus(barangLamaId);
+export async function confirmUpload(actorId: string, grupId: string, input: DokumenConfirmInput) {
+  const group = await getGrup(grupId);
   const bucket = bucketFor(input.jenis);
-
-  if (!input.objectKey.startsWith(`sensus/${sensus.id}/`)) {
-    throw ApiError.badRequest("Object key tidak sesuai dengan sensus ini");
+  if (!input.objectKey.startsWith(`grup/${group.id}/`)) {
+    throw ApiError.badRequest("Object key tidak sesuai dengan grup sensus ini");
   }
 
   const existing = await prisma.sensusDokumen.findUnique({
@@ -175,7 +169,7 @@ export async function confirmUpload(
       uploadedBy: { select: { id: true, nama: true } },
     },
   });
-  if (existing) return { dokumen: await serialize(existing as never), sensusStatus: sensus.status };
+  if (existing) return { dokumen: await serialize(existing), sensusStatus: group.status };
 
   let stat: { size: number; metaData?: Record<string, string> };
   try {
@@ -186,21 +180,18 @@ export async function confirmUpload(
   } catch {
     throw ApiError.badRequest("File belum ditemukan di MinIO. Upload ke presigned URL dulu.");
   }
-
   if (stat.size > MAX_BYTES) throw ApiError.badRequest("Ukuran file maksimal 15 MB");
 
-  const contentType =
-    input.contentType ?? stat.metaData?.["content-type"] ?? "application/octet-stream";
+  const contentType = input.contentType ?? stat.metaData?.["content-type"] ?? "application/octet-stream";
   validateContent(input.jenis, contentType);
-
   const thumbKey =
     input.jenis === "FOTO" && contentType.startsWith("image/")
-      ? await makeThumbnail(sensus.id, bucket, input.objectKey)
+      ? await makeThumbnail(group.id, bucket, input.objectKey)
       : null;
 
   const created = await prisma.sensusDokumen.create({
     data: {
-      sensusId: sensus.id,
+      grupId: group.id,
       jenis: input.jenis,
       bucket,
       objectKey: input.objectKey,
@@ -216,16 +207,15 @@ export async function confirmUpload(
     },
   });
 
-  await syncDocsComplete(sensus.id);
-  const updated = await getSensus(barangLamaId);
-
+  await syncDocsComplete(group.id);
+  const updated = await getGrup(group.id);
   return { dokumen: await serialize(created), sensusStatus: updated.status };
 }
 
-export async function listDokumen(barangLamaId: string) {
-  const sensus = await getSensus(barangLamaId);
+export async function listDokumen(grupId: string) {
+  const group = await getGrup(grupId);
   const docs = await prisma.sensusDokumen.findMany({
-    where: { sensusId: sensus.id },
+    where: { grupId },
     orderBy: { createdAt: "asc" },
     select: {
       id: true, jenis: true, bucket: true, objectKey: true, thumbKey: true,
@@ -233,29 +223,23 @@ export async function listDokumen(barangLamaId: string) {
       uploadedBy: { select: { id: true, nama: true } },
     },
   });
-
   const items = await Promise.all(docs.map((doc) => serialize(doc)));
-  return { sensusStatus: sensus.status, docsComplete: sensus.docsComplete, items };
+  return { sensusStatus: group.status, docsComplete: group.docsComplete, items };
 }
 
-export async function deleteDokumen(
-  barangLamaId: string,
-  dokumenId: string,
-): Promise<{ sensusStatus: string; docsComplete: boolean }> {
-  const sensus = await getSensus(barangLamaId);
+export async function deleteDokumen(grupId: string, dokumenId: string) {
+  const group = await getGrup(grupId);
   const doc = await prisma.sensusDokumen.findFirst({
-    where: { id: dokumenId, sensusId: sensus.id },
+    where: { id: dokumenId, grupId },
     select: { id: true, bucket: true, objectKey: true, thumbKey: true },
   });
   if (!doc) throw ApiError.notFound("Dokumen tidak ditemukan");
-
   await Promise.allSettled([
     minio.removeObject(doc.bucket, doc.objectKey),
     doc.thumbKey ? minio.removeObject(BUCKETS.thumb, doc.thumbKey) : Promise.resolve(),
   ]);
   await prisma.sensusDokumen.delete({ where: { id: doc.id } });
-  await syncDocsComplete(sensus.id);
-
-  const updated = await getSensus(barangLamaId);
+  await syncDocsComplete(group.id);
+  const updated = await getGrup(group.id);
   return { sensusStatus: updated.status, docsComplete: updated.docsComplete };
 }

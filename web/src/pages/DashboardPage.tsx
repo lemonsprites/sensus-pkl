@@ -9,13 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableEmpty,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Loader } from "@/components/Loader";
 import { api, apiDownload } from "@/lib/api";
@@ -95,33 +89,21 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-xl font-semibold">Dashboard Sensus</h1>
           <p className="text-sm text-muted-foreground">
-            Inbox pekerjaan: dokumen, verifikasi, input SIMAN, cetak, dan tempel label.
+            Inbox pekerjaan: dokumen, verifikasi, cetak, dan tempel label.
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={exporting}
-            onClick={() => void handleExport("csv")}
-          >
+          <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExport("csv")}>
             <Download /> Export CSV
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={exporting}
-            onClick={() => void handleExport("xlsx")}
-          >
+          <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExport("xlsx")}>
             <Download /> Export XLSX
           </Button>
         </div>
       </div>
 
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -129,15 +111,8 @@ export default function DashboardPage() {
           <button
             key={value}
             type="button"
-            onClick={() => {
-              setTab(value);
-              setPage(1);
-              setQInput("");
-              setQ("");
-            }}
-            className={`rounded-lg border p-3 text-left transition-colors ${
-              tab === value ? "border-primary bg-primary/5" : "hover:bg-muted/40"
-            }`}
+            onClick={() => { setTab(value); setPage(1); setQInput(""); setQ(""); }}
+            className={`rounded-lg border p-3 text-left transition-colors ${tab === value ? "border-primary bg-primary/5" : "hover:bg-muted/40"}`}
           >
             <div className="text-xs text-muted-foreground">{label}</div>
             <div className="text-2xl font-semibold">{data?.counts?.[value] ?? 0}</div>
@@ -146,34 +121,20 @@ export default function DashboardPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>{TABS.find(([value]) => value === tab)?.[1]}</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>{TABS.find(([value]) => value === tab)?.[1]}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <form
             className="flex flex-wrap items-end gap-2"
-            onSubmit={(event: FormEvent) => {
-              event.preventDefault();
-              setQ(qInput.trim());
-              setPage(1);
-            }}
+            onSubmit={(event: FormEvent) => { event.preventDefault(); setQ(qInput.trim()); setPage(1); }}
           >
             <div className="min-w-56 flex-1 space-y-2">
               <Label htmlFor="dash-q">Cari</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="dash-q"
-                  value={qInput}
-                  onChange={(event) => setQInput(event.target.value)}
-                  placeholder="nama / kode register / NUP"
-                  className="pl-9"
-                />
+                <Input id="dash-q" value={qInput} onChange={(event) => setQInput(event.target.value)} placeholder="nama / kode register / NUP / kode barang" className="pl-9" />
               </div>
             </div>
-            <Button type="submit" variant="secondary">
-              <Search /> Cari
-            </Button>
+            <Button type="submit" variant="secondary"><Search /> Cari</Button>
           </form>
 
           {loading ? (
@@ -184,64 +145,70 @@ export default function DashboardPage() {
                 <TableRow>
                   <TableHead>Aset</TableHead>
                   <TableHead>Ruang</TableHead>
+                  <TableHead>Detail</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Diinput</TableHead>
                   <TableHead>Update</TableHead>
                   <TableHead className="text-right">Buka</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data && data.items.length > 0 ? (
-                  data.items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="max-w-72">
-                        <div className="truncate font-medium">{item.barangLama.nama}</div>
-                        <div className="font-mono text-xs text-muted-foreground">
-                          {item.barangLama.kodeRegister ?? "—"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.barangLama.kodeBarang ?? "—"} · NUP {item.barangLama.kodeSiman ?? "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {item.barangLama.ruang ? (
-                          <>
-                            <div>{item.barangLama.ruang.nama}</div>
-                            <div className="text-muted-foreground">
-                              {item.barangLama.ruang.bangunanAset.nama}
-                            </div>
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
+                  data.items.map((item) => {
+                    const roomId = item.ruang?.id;
+                    return (
+                      <TableRow key={`${item.kind}-${item.id}`}>
+                        <TableCell className="max-w-72">
+                          {item.kind === "GROUP" ? (
+                            <>
+                              <div className="truncate font-medium">{item.namaBarang}</div>
+                              <div className="font-mono text-xs text-muted-foreground">{item.kodeBarang}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="truncate font-medium">{item.masterAset.nama}</div>
+                              <div className="font-mono text-xs text-muted-foreground">{item.masterAset.kodeRegister ?? "—"}</div>
+                              <div className="text-xs text-muted-foreground">NUP {item.masterAset.kodeSiman ?? "—"}</div>
+                            </>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {item.ruang ? (
+                            <>
+                              <div>{item.ruang.nama}</div>
+                              <div className="text-muted-foreground">{item.ruang.bangunanAset.nama}</div>
+                            </>
+                          ) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {item.kind === "GROUP"
+                            ? `${item.kondisi} · ${item.jumlah} unit`
+                            : item.grup
+                              ? `${item.grup.kondisi} · ${item.grup.jumlah} unit`
+                              : "—"}
+                          {item.kind === "GROUP" && item.catatanOtomatis && (
+                            <div className="text-muted-foreground">{item.catatanOtomatis}</div>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <Badge variant={item.status === "VALIDATED" ? "default" : "secondary"}>
                             {STATUS_LABEL[item.status] ?? item.status}
                           </Badge>
-                          {item.isTemuanBaru && <Badge variant="destructive">temuan baru</Badge>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {item.diinputOleh?.nama ?? "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(item.updatedAt)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.barangLama.ruang ? (
-                          <Button asChild size="sm" variant="outline">
-                            <Link to={`/sensus/${item.barangLama.ruang.id}`}>
-                              <ArrowUpRight /> Buka
-                            </Link>
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">tanpa ruang</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {formatDate(item.updatedAt)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {roomId ? (
+                            <Button asChild size="sm" variant="outline">
+                              <Link to={`/sensus/${roomId}`}><ArrowUpRight /> Buka</Link>
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableEmpty colSpan={6}>Tidak ada item di tab ini.</TableEmpty>
                 )}
@@ -250,26 +217,10 @@ export default function DashboardPage() {
           )}
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Halaman {page} dari {totalPages} · {data?.total ?? 0} item
-            </span>
+            <span className="text-muted-foreground">Halaman {page} dari {totalPages} · {data?.total ?? 0} item</span>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                Sebelumnya
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Berikutnya
-              </Button>
+              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Sebelumnya</Button>
+              <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((current) => current + 1)}>Berikutnya</Button>
             </div>
           </div>
         </CardContent>

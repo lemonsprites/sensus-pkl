@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { QrCode, Search } from "lucide-react";
-import { Link } from "react-router-dom";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -115,10 +114,10 @@ export default function ScanPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <div className="text-xs text-muted-foreground">Gedung / Ruang</div>
-                <div>{result.asset.ruang?.bangunanAset.nama ?? "—"}</div>
+                <div>{result.asset.sensus?.ruang?.bangunanAset.nama ?? "—"}</div>
                 <div className="text-muted-foreground">
-                  {result.asset.ruang
-                    ? `${result.asset.ruang.nama} (${result.asset.ruang.kode}) · Lantai ${result.asset.ruang.lantai}`
+                  {result.asset.sensus?.ruang
+                    ? `${result.asset.sensus?.ruang.nama} (${result.asset.sensus?.ruang.kode}) · Lantai ${result.asset.sensus?.ruang.lantai}`
                     : "tanpa ruang"}
                 </div>
               </div>
@@ -148,11 +147,6 @@ export default function ScanPage() {
               </div>
             </div>
 
-            {result.asset.ruang && (
-              <Button asChild variant="outline" size="sm">
-                <Link to="/hierarki">Buka ruang aset</Link>
-              </Button>
-            )}
           </CardContent>
         </Card>
       )}

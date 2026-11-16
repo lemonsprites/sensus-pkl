@@ -6,34 +6,46 @@ export const ruangParamSchema = z.object({
   id: uuid("ID ruang"),
 });
 
-export const sensusParamSchema = z.object({
-  barangLamaId: uuid("ID aset"),
+export const grupParamSchema = z.object({
+  id: uuid("ID grup sensus"),
 });
 
-export const roomAssetsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+export const kandidatQuerySchema = z.object({
   q: z.string().trim().max(120).optional(),
-  status: z.enum(["SEMUA", "BELUM", "SUDAH"]).default("SEMUA"),
 });
 
-export const sensusUpsertSchema = z.object({
-  jumlahFisik: z.coerce.number().int().min(0).max(1_000_000).nullable().optional(),
-  kondisi: z.enum(["BAIK", "RUSAK_RINGAN", "RUSAK_BERAT"]).nullable().optional(),
-  statusMatch: z.enum(["COCOK", "TIDAK_COCOK", "TEMUAN_BARU"]).nullable().optional(),
-  isTemuanBaru: z.boolean().optional(),
-  docsNote: z.string().trim().max(1000).nullable().optional(),
-  catatan: z.string().trim().max(1000).nullable().optional(),
-  status: z.enum(["DRAFT", "ASSESSED", "TIDAK_DITEMUKAN"]).default("ASSESSED"),
+const kondisiSchema = z.enum(["BAIK", "RUSAK_RINGAN", "RUSAK_BERAT"]);
+
+export const createSensusGrupSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        kodeBarang: z.string().trim().min(1, "Kode Barang wajib").max(64),
+        kondisi: kondisiSchema,
+        jumlah: z.coerce.number().int().min(1, "Jumlah minimal 1").max(500),
+        catatan: z.string().trim().max(1000).optional(),
+      }),
+    )
+    .min(1, "Minimal satu baris input")
+    .max(100),
 });
 
-export type RuangParam = z.infer<typeof ruangParamSchema>;
-export type SensusParam = z.infer<typeof sensusParamSchema>;
-export type RoomAssetsQuery = z.infer<typeof roomAssetsQuerySchema>;
-export type SensusUpsertInput = z.infer<typeof sensusUpsertSchema>;
+export const updateSensusGrupSchema = z
+  .object({
+    kondisi: kondisiSchema.optional(),
+    catatan: z.string().trim().max(1000).nullable().optional(),
+  })
+  .refine((data) => data.kondisi !== undefined || data.catatan !== undefined, {
+    message: "Tidak ada perubahan yang dikirim",
+  });
 
-export const rejectSensusSchema = z.object({
+export const rejectSensusGrupSchema = z.object({
   catatan: z.string().trim().min(1, "Alasan penolakan wajib diisi").max(1000),
 });
 
-export type RejectSensusInput = z.infer<typeof rejectSensusSchema>;
+export type RuangParam = z.infer<typeof ruangParamSchema>;
+export type GrupParam = z.infer<typeof grupParamSchema>;
+export type KandidatQuery = z.infer<typeof kandidatQuerySchema>;
+export type CreateSensusGrupInput = z.infer<typeof createSensusGrupSchema>;
+export type UpdateSensusGrupInput = z.infer<typeof updateSensusGrupSchema>;
+export type RejectSensusGrupInput = z.infer<typeof rejectSensusGrupSchema>;

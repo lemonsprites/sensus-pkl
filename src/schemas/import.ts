@@ -38,7 +38,6 @@ export const importRowPatchSchema = z
     noSeri: optionalText(120),
     tahun: z.coerce.number().int().min(1900).max(2100).optional(),
     nilaiPerolehan: z.union([z.string(), z.number()]).optional(),
-    lokasiSiman: optionalText(255),
     kondisiSiman: optionalText(120),
     statusAset: optionalText(120),
     catatan: optionalText(500),

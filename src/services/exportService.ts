@@ -15,26 +15,16 @@ const EXPORT_SELECT = {
   labelAppliedAt: true,
   diverifikasiAt: true,
   updatedAt: true,
-  barangLama: {
+  masterAset: {
     select: {
-      kodeRegister: true,
-      kodeBarang: true,
-      kodeSiman: true,
-      nama: true,
-      kategori: true,
-      kodeSatker: true,
-      statusAset: true,
-      syncStatus: true,
-      ruang: {
-        select: {
-          kode: true,
-          nama: true,
-          lantai: true,
-          bangunanAset: { select: { nama: true } },
-        },
-      },
+      kodeRegister: true, kodeBarang: true, kodeSiman: true, nama: true,
+      kategori: true, kodeSatker: true, statusAset: true, syncStatus: true,
     },
   },
+  ruang: {
+    select: { kode: true, nama: true, lantai: true, bangunanAset: { select: { nama: true } } },
+  },
+  grup: { select: { id: true, kodeBarang: true, namaBarang: true, kondisi: true, jumlah: true } },
   diinputOleh: { select: { nama: true } },
   diverifikasiOleh: { select: { nama: true } },
 } as const;
@@ -46,24 +36,25 @@ function csvCell(value: unknown): string {
 }
 
 export async function exportSensus(format: "csv" | "xlsx") {
-  const rows = await prisma.sensus.findMany({
-    select: EXPORT_SELECT,
-    orderBy: { updatedAt: "asc" },
-  });
+  const rows = await prisma.sensus.findMany({ select: EXPORT_SELECT, orderBy: { updatedAt: "asc" } });
 
   const flat = rows.map((row) => ({
-    kode_register: row.barangLama.kodeRegister,
-    kode_barang: row.barangLama.kodeBarang,
-    nup: row.barangLama.kodeSiman,
-    nama_barang: row.barangLama.nama,
-    kategori: row.barangLama.kategori,
-    kode_satker: row.barangLama.kodeSatker,
-    status_bmn: row.barangLama.statusAset,
-    sync_status: row.barangLama.syncStatus,
-    gedung: row.barangLama.ruang?.bangunanAset.nama ?? null,
-    ruang: row.barangLama.ruang?.nama ?? null,
-    kode_ruang: row.barangLama.ruang?.kode ?? null,
-    lantai: row.barangLama.ruang?.lantai ?? null,
+    grup_id: row.grup?.id ?? null,
+    grup_kode_barang: row.grup?.kodeBarang ?? null,
+    grup_kondisi: row.grup?.kondisi ?? null,
+    grup_jumlah: row.grup?.jumlah ?? null,
+    kode_register: row.masterAset.kodeRegister,
+    kode_barang: row.masterAset.kodeBarang,
+    nup: row.masterAset.kodeSiman,
+    nama_barang: row.masterAset.nama,
+    kategori: row.masterAset.kategori,
+    kode_satker: row.masterAset.kodeSatker,
+    status_bmn: row.masterAset.statusAset,
+    sync_status: row.masterAset.syncStatus,
+    gedung: row.ruang?.bangunanAset.nama ?? null,
+    ruang: row.ruang?.nama ?? null,
+    kode_ruang: row.ruang?.kode ?? null,
+    lantai: row.ruang?.lantai ?? null,
     status_sensus: row.status,
     jumlah_fisik: row.jumlahFisik,
     kondisi: row.kondisi,
@@ -95,6 +86,7 @@ export async function exportSensus(format: "csv" | "xlsx") {
   }
 
   const headers = Object.keys(flat[0] ?? {
+    grup_id: "", grup_kode_barang: "", grup_kondisi: "", grup_jumlah: "",
     kode_register: "", kode_barang: "", nup: "", nama_barang: "", kategori: "",
     kode_satker: "", status_bmn: "", sync_status: "", gedung: "", ruang: "",
     kode_ruang: "", lantai: "", status_sensus: "", jumlah_fisik: "", kondisi: "",

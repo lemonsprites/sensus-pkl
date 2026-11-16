@@ -5,7 +5,13 @@ import { config } from "../lib/config.js";
 import type { ImportRowPatchInput } from "../schemas/import.js";
 import { ApiError } from "../utils/apiError.js";
 
-/** Baris hasil normalisasi + validasi (disimpan di Redis staging). */
+export interface RawColumn {
+  header: string;
+  value: string;
+  column: string;
+}
+
+/** Baris hasil normalisasi + seluruh kolom asli (dataMentah). */
 export interface ImportRow {
   rowNum: number;
   kodeRegister: string | null;
@@ -18,42 +24,48 @@ export interface ImportRow {
   merk: string | null;
   noSeri: string | null;
   tahun: number | null;
-  /** Decimal sebagai string agar aman di JSON/Prisma. */
   nilaiPerolehan: string | null;
-  lokasiSiman: string | null;
   kondisiSiman: string | null;
   statusAset: string | null;
   catatan: string | null;
+  /** SELURUH kolom Excel/CSV asli, urutan dan header dipertahankan. */
+  dataMentah?: RawColumn[];
   errors: string[];
   warnings: string[];
 }
 
-type Field = keyof Omit<ImportRow, "rowNum" | "errors" | "warnings">;
-type RawField = Field | "lokasiSimanAlt";
-type RawRow = Partial<Record<RawField, string>>;
+export interface HeaderInfo {
+  header: string;
+  column: string;
+}
 
-const HEADER_ALIASES: Record<RawField, string[]> = {
-  kodeRegister: ["kode register", "kode register barang", "no register", "nomor register", "kode_register"],
-  kodeBarang: ["kode barang", "kode_barang", "kodebarang"],
-  kodeSiman: ["nup", "kode siman", "kode_siman", "nomor urut pendaftaran"],
+export interface ParsedImport {
+  rows: ImportRow[];
+  headers: HeaderInfo[];
+}
+
+type Field = keyof Omit<ImportRow, "rowNum" | "errors" | "warnings" | "dataMentah">;
+type RawRow = Partial<Record<Field, string>>;
+
+const HEADER_ALIASES: Record<Field, string[]> = {
+  kodeRegister: ["kode register", "kode register barang", "no register", "nomor register"],
+  kodeBarang: ["kode barang", "kodebarang"],
+  kodeSiman: ["nup", "kode siman", "nomor urut pendaftaran"],
   nama: ["nama barang", "nama", "uraian barang"],
   kategori: ["jenis bmn", "jenis barang", "kategori"],
-  kodeSatker: ["kode satker", "kode_satker", "kode satuan kerja"],
+  kodeSatker: ["kode satker", "kode satuan kerja"],
   jumlahLama: ["jumlah", "jumlah lama", "kuantitas", "qty"],
   merk: ["merk", "merek"],
   noSeri: ["no seri", "nomor seri", "no. seri", "serial number"],
   tahun: ["tahun perolehan", "tahun"],
   nilaiPerolehan: ["nilai perolehan", "nilai perolehan pertama", "nilai"],
-  lokasiSiman: ["lokasi ruang", "lokasi"],
-  /** Kolom RUANGAN (D) — dipakai sebagai fallback bila Lokasi Ruang kosong. */
-  lokasiSimanAlt: ["ruangan", "ruang"],
   kondisiSiman: ["kondisi", "kondisi bmn"],
   statusAset: ["status bmn", "status"],
   catatan: ["catatan", "keterangan"],
 };
 
-const HEADER_LOOKUP = new Map<string, RawField>();
-for (const [field, aliases] of Object.entries(HEADER_ALIASES) as Array<[RawField, string[]]>) {
+const HEADER_LOOKUP = new Map<string, Field>();
+for (const [field, aliases] of Object.entries(HEADER_ALIASES) as Array<[Field, string[]]>) {
   for (const alias of aliases) HEADER_LOOKUP.set(normalizeHeader(alias), field);
   HEADER_LOOKUP.set(normalizeHeader(field), field);
 }
@@ -65,6 +77,17 @@ function normalizeHeader(value: string): string {
     .replace(/[_.\-/]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function columnLetter(index: number): string {
+  let n = index + 1;
+  let result = "";
+  while (n > 0) {
+    const mod = (n - 1) % 26;
+    result = String.fromCharCode(65 + mod) + result;
+    n = Math.floor((n - 1) / 26);
+  }
+  return result;
 }
 
 function toText(value: unknown): string {
@@ -97,7 +120,6 @@ function parseYear(value: string): number | null {
   return year >= 1900 && year <= 2100 ? year : null;
 }
 
-/** Dukung format Indonesia (1.234.567,89) dan internasional (1,234,567.89). */
 function parseAmount(value: string): string | null {
   if (!value || value.trim() === "" || value.trim() === "-") return null;
   let text = value.replace(/[^\d.,-]/g, "");
@@ -113,13 +135,12 @@ function parseAmount(value: string): string | null {
   return Number.isFinite(number) ? number.toFixed(2) : null;
 }
 
-/** Baris header teknis Excel (Column1, Column2, ...) — bukan data. */
 function isTechnicalHeaderRow(cells: unknown[]): boolean {
   const texts = cells.map((cell) => toText(cell)).filter(Boolean);
   return texts.length > 0 && texts.every((text) => /^column\d+$/i.test(text));
 }
 
-function normalizeRow(raw: RawRow, rowNum: number): ImportRow {
+function normalizeRow(raw: RawRow, rowNum: number, dataMentah: RawColumn[]): ImportRow {
   const kodeSimanRaw = toText(raw.kodeSiman).replace(/\.0$/, "");
   return {
     rowNum,
@@ -134,11 +155,10 @@ function normalizeRow(raw: RawRow, rowNum: number): ImportRow {
     noSeri: cleanText(toText(raw.noSeri)),
     tahun: parseYear(toText(raw.tahun)),
     nilaiPerolehan: parseAmount(toText(raw.nilaiPerolehan)),
-    // C (Lokasi Ruang) diutamakan; D (RUANGAN) hanya fallback.
-    lokasiSiman: cleanText(toText(raw.lokasiSiman) || toText(raw.lokasiSimanAlt)),
     kondisiSiman: cleanText(toText(raw.kondisiSiman)),
     statusAset: cleanText(toText(raw.statusAset)),
     catatan: cleanText(toText(raw.catatan)),
+    dataMentah,
     errors: [],
     warnings: [],
   };
@@ -154,13 +174,13 @@ function detectDelimiter(text: string): string {
 }
 
 interface HeaderColumn {
-  field: RawField;
+  field: Field;
   index: number;
 }
 
 function mapHeaderRow(row: unknown[]): HeaderColumn[] {
   const columns: HeaderColumn[] = [];
-  const seen = new Set<RawField>();
+  const seen = new Set<Field>();
   row.forEach((cell, index) => {
     const field = HEADER_LOOKUP.get(normalizeHeader(toText(cell)));
     if (field && !seen.has(field)) {
@@ -171,7 +191,11 @@ function mapHeaderRow(row: unknown[]): HeaderColumn[] {
   return columns;
 }
 
-function findHeader(rows: unknown[][]): { headerIndex: number; columns: HeaderColumn[] } {
+function findHeader(rows: unknown[][]): {
+  headerIndex: number;
+  columns: HeaderColumn[];
+  headers: HeaderInfo[];
+} {
   let headerIndex = -1;
   let columns: HeaderColumn[] = [];
 
@@ -183,13 +207,21 @@ function findHeader(rows: unknown[][]): { headerIndex: number; columns: HeaderCo
     }
   }
 
-  if (headerIndex < 0 || columns.length < 2) {
+  const required: Field[] = ["kodeRegister", "kodeBarang", "kodeSiman", "nama"];
+  const missing = required.filter((field) => !columns.some((column) => column.field === field));
+  if (headerIndex < 0 || missing.length > 0) {
     throw ApiError.badRequest(
-      "Header file tidak dikenali. Wajib ada kolom Kode Register / Kode Barang / NUP / Nama Barang.",
+      `Header wajib tidak ditemukan: ${missing.join(", ") || "Kode Register/Kode Barang/NUP/Nama Barang"}`,
     );
   }
 
-  return { headerIndex, columns };
+  const headerRow = rows[headerIndex] ?? [];
+  const headers: HeaderInfo[] = headerRow.map((cell, index) => ({
+    header: toText(cell) || `Kolom ${columnLetter(index)}`,
+    column: columnLetter(index),
+  }));
+
+  return { headerIndex, columns, headers };
 }
 
 export function validateImportRows(rows: ImportRow[]): ImportRow[] {
@@ -202,10 +234,9 @@ export function validateImportRows(rows: ImportRow[]): ImportRow[] {
     row.warnings = [];
 
     if (!row.nama) row.errors.push("Nama barang kosong");
-
-    if (!row.kodeRegister && !(row.kodeBarang && row.kodeSiman)) {
-      row.errors.push("Kode Register atau kombinasi Kode Barang+NUP wajib ada");
-    }
+    if (!row.kodeRegister) row.errors.push("Kode Register kosong");
+    if (!row.kodeBarang) row.errors.push("Kode Barang kosong");
+    if (!row.kodeSiman) row.errors.push("NUP kosong");
 
     if (row.kodeRegister) {
       if (seenRegister.has(row.kodeRegister)) {
@@ -213,8 +244,6 @@ export function validateImportRows(rows: ImportRow[]): ImportRow[] {
       } else {
         seenRegister.add(row.kodeRegister);
       }
-    } else {
-      row.warnings.push("Kode Register kosong — QR label tidak bisa dicetak");
     }
 
     if (row.kodeBarang && row.kodeSiman) {
@@ -237,15 +266,13 @@ export function validateImportRows(rows: ImportRow[]): ImportRow[] {
     if (nupPattern && row.kodeSiman && !nupPattern.test(row.kodeSiman)) {
       row.errors.push(`Format NUP tidak valid: ${row.kodeSiman}`);
     }
-
-    if (!row.kodeSiman) row.warnings.push("NUP kosong — tidak bisa masuk gate label");
   }
 
   return rows;
 }
 
-/** Parse XLSX atau CSV (deteksi dari nama file / magic bytes). */
-export function parseImportFile(buffer: Buffer, filename: string): ImportRow[] {
+/** Parse XLSX atau CSV; semua kolom asli disimpan di dataMentah. */
+export function parseImportFile(buffer: Buffer, filename: string): ParsedImport {
   const isXlsx =
     /\.(xlsx|xls)$/i.test(filename) || (buffer[0] === 0x50 && buffer[1] === 0x4b);
 
@@ -274,7 +301,7 @@ export function parseImportFile(buffer: Buffer, filename: string): ImportRow[] {
 
   if (matrix.length === 0) throw ApiError.badRequest("File kosong");
 
-  const { headerIndex, columns } = findHeader(matrix);
+  const { headerIndex, columns, headers } = findHeader(matrix);
   const rows: ImportRow[] = [];
 
   for (let i = headerIndex + 1; i < matrix.length; i++) {
@@ -284,7 +311,23 @@ export function parseImportFile(buffer: Buffer, filename: string): ImportRow[] {
 
     const raw: RawRow = {};
     for (const { field, index } of columns) raw[field] = toText(cells[index]);
-    rows.push(normalizeRow(raw, i + 1));
+
+    const dataMentah: RawColumn[] = headers.map((info, index) => ({
+      header: info.header,
+      column: info.column,
+      value: toText(cells[index]),
+    }));
+
+    // Kolom tambahan yang melebihi header tetap disimpan.
+    for (let extra = headers.length; extra < cells.length; extra++) {
+      dataMentah.push({
+        header: `Kolom ${columnLetter(extra)}`,
+        column: columnLetter(extra),
+        value: toText(cells[extra]),
+      });
+    }
+
+    rows.push(normalizeRow(raw, i + 1, dataMentah));
   }
 
   if (rows.length === 0) throw ApiError.badRequest("File tidak berisi baris data");
@@ -294,10 +337,10 @@ export function parseImportFile(buffer: Buffer, filename: string): ImportRow[] {
     );
   }
 
-  return validateImportRows(rows);
+  return { rows: validateImportRows(rows), headers };
 }
 
-/** Terapkan hasil edit preview ke satu baris (normalisasi sama seperti upload). */
+/** Terapkan hasil edit preview ke satu baris (dataMentah tidak diubah). */
 export function applyRowPatch(row: ImportRow, patch: ImportRowPatchInput): ImportRow {
   const next: ImportRow = { ...row };
   const codeFields = ["kodeRegister", "kodeBarang", "kodeSiman", "kodeSatker"] as const;
@@ -306,7 +349,7 @@ export function applyRowPatch(row: ImportRow, patch: ImportRowPatchInput): Impor
     if (value !== undefined) next[field] = cleanCode(value);
   }
 
-  const textFields = ["kategori", "merk", "noSeri", "lokasiSiman", "kondisiSiman", "statusAset", "catatan"] as const;
+  const textFields = ["kategori", "merk", "noSeri", "kondisiSiman", "statusAset", "catatan"] as const;
   for (const field of textFields) {
     const value = patch[field];
     if (value !== undefined) next[field] = cleanText(value);

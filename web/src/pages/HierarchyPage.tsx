@@ -118,7 +118,7 @@ export default function HierarchyPage() {
           {[
             ["Bangunan", data.total.bangunan],
             ["Ruang", data.total.ruang],
-            ["Aset di ruang", data.total.asetDiRuang],
+            ["NUP disensus", data.total.nupDisensus],
             ["Tanah", data.total.tanah],
           ].map(([label, value]) => (
             <Card key={String(label)}>
@@ -142,7 +142,6 @@ export default function HierarchyPage() {
       ) : (
         <div className="space-y-5">
           {buildings.map((building) => {
-            const virtual = building.ruang.find((room) => room.tipeRuang === "TANPA RUANGAN");
             return (
               <Card key={building.id}>
                 <CardHeader className="flex-row flex-wrap items-start justify-between gap-3">
@@ -157,24 +156,14 @@ export default function HierarchyPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <SensusBadge sensus={building.sensus} />
-                    {virtual && (
-                      <Link
-                        to={`/sensus/${virtual.id}`}
-                        className="inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium hover:bg-muted"
-                      >
-                        Sensus Gedung
-                      </Link>
-                    )}
-                  </div>
+                  <SensusBadge sensus={building.sensus} />
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {groupByFloor(building.ruang).map(([floor, rooms]) => (
                     <div key={floor} className="space-y-2">
                       <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         <Landmark className="size-3.5" />
-                        {floor === 0 ? "Tanpa lantai / virtual" : `Lantai ${floor}`}
+                        {floor === 0 ? "Tanpa lantai" : `Lantai ${floor}`}
                       </div>
                       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {rooms.map((room) => (
@@ -193,11 +182,8 @@ export default function HierarchyPage() {
                               <ChevronRight className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
                             </div>
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              <Badge variant="outline">{room.jumlahAset} aset</Badge>
-                              <Badge variant="secondary">{room.jumlahSensus} disensus</Badge>
-                              {room.tipeRuang === "TANPA RUANGAN" && (
-                                <Badge variant="destructive">virtual</Badge>
-                              )}
+                              <Badge variant="outline">{room.jumlahNup} NUP</Badge>
+                              <Badge variant="secondary">{room.jumlahGrup} grup</Badge>
                             </div>
                           </Link>
                         ))}

@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 import type { ImportBatchModel } from "../generated/prisma/models.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import { config } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import { BUCKETS, minio } from "../lib/minio.js";
@@ -49,6 +50,7 @@ function serializeBatch(batch: ImportBatchModel) {
     committedAt: batch.committedAt?.toISOString() ?? null,
     createdAt: batch.createdAt.toISOString(),
     errors: batch.errors,
+    headers: batch.headers,
   };
 }
 
@@ -71,7 +73,9 @@ async function writeStaging(batchId: string, rows: ImportRow[], meta: StagingMet
     const pipeline = redis.pipeline();
     for (const row of chunk) {
       const field = String(row.rowNum);
-      pipeline.hset(rowKey, field, JSON.stringify(row));
+      const normalized = { ...row };
+      delete normalized.dataMentah;
+      pipeline.hset(rowKey, field, JSON.stringify(normalized));
       pipeline.zadd(indexKey, row.rowNum, field);
     }
     const results = await pipeline.exec();
@@ -202,6 +206,28 @@ async function readAllRows(batchId: string): Promise<ImportRow[]> {
   return rows;
 }
 
+/** Ambil metadata lengkap (semua kolom) dari backup MinIO, bukan Redis. */
+async function loadRawMap(batchId: string): Promise<Map<number, unknown>> {
+  try {
+    const stream = (await minio.getObject(BUCKETS.staging, stagingKey(batchId))) as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+    }
+    const rows = gunzipSync(Buffer.concat(chunks))
+      .toString("utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as ImportRow);
+    return new Map(rows.map((row) => [row.rowNum, row.dataMentah ?? []]));
+  } catch (error) {
+    logger.error({ err: (error as Error).message, batchId }, "Gagal membaca metadata dari MinIO");
+    throw ApiError.badRequest(
+      "Metadata lengkap (semua kolom) hanya tersedia dari backup MinIO. Pastikan MinIO hidup lalu coba commit lagi.",
+    );
+  }
+}
+
 async function readPage(batchId: string, page: number, limit: number) {
   const total = await redis.zcard(K.importIndex(batchId));
   const start = (page - 1) * limit;
@@ -247,7 +273,7 @@ export async function createPreview(
     );
   }
 
-  const rows = parseImportFile(file.buffer, file.originalname);
+  const { rows, headers } = parseImportFile(file.buffer, file.originalname);
   const counts = countValid(rows);
   const snapshotAt = new Date();
   const batchId = randomUUID();
@@ -261,6 +287,7 @@ export async function createPreview(
       snapshotAt,
       totalRows: rows.length,
       importedBy: actor.id,
+      headers: headers as unknown as Prisma.InputJsonValue,
       // Audit: simpan maksimal 100 error pertama (Patch C).
       ...(invalidRows.length > 0
         ? { errors: invalidRows.slice(0, 100).map((row) => ({ rowNum: row.rowNum, errors: row.errors })) }
@@ -370,8 +397,14 @@ export async function commitPreview(actor: Actor, batchId: string) {
   const rows = await readAllRows(batchId);
   if (rows.length === 0) throw ApiError.badRequest("Staging kosong — upload ulang file");
 
-  validateImportRows(rows);
-  const invalid = rows.filter((row) => row.errors.length > 0);
+  const rawMap = await loadRawMap(batchId);
+  const rowsWithRaw = rows.map((row) => ({
+    ...row,
+    dataMentah: (rawMap.get(row.rowNum) ?? []) as ImportRow["dataMentah"],
+  }));
+  const rowsForCommit = rowsWithRaw;
+  validateImportRows(rowsForCommit);
+  const invalid = rowsForCommit.filter((row) => row.errors.length > 0);
   if (invalid.length > 0) {
     throw ApiError.badRequest(
       `${invalid.length} baris masih memiliki error. Perbaiki dulu sebelum commit.`,
@@ -379,7 +412,7 @@ export async function commitPreview(actor: Actor, batchId: string) {
     );
   }
 
-  const registers = rows
+  const registers = rowsForCommit
     .map((row) => row.kodeRegister)
     .filter((value): value is string => value !== null);
 
@@ -387,7 +420,7 @@ export async function commitPreview(actor: Actor, batchId: string) {
   const lookupChunk = 5000;
   for (let start = 0; start < registers.length; start += lookupChunk) {
     const chunk = registers.slice(start, start + lookupChunk);
-    const found = await prisma.barangLama.findMany({
+    const found = await prisma.masterAset.findMany({
       where: { kodeRegister: { in: chunk } },
       select: { kodeRegister: true },
     });
@@ -398,11 +431,11 @@ export async function commitPreview(actor: Actor, batchId: string) {
 
   let updated = 0;
   let inserted = 0;
-  for (const row of rows) {
+  for (const row of rowsForCommit) {
     if (row.kodeRegister && existingRegisters.has(row.kodeRegister)) {
       updated += 1;
     } else if (!row.kodeRegister && row.kodeBarang && row.kodeSiman) {
-      const found = await prisma.barangLama.findFirst({
+      const found = await prisma.masterAset.findFirst({
         where: { kodeBarang: row.kodeBarang, kodeSiman: row.kodeSiman },
         select: { id: true },
       });
@@ -418,7 +451,7 @@ export async function commitPreview(actor: Actor, batchId: string) {
 
   await prisma.$transaction(
     async (tx) => {
-      for (const row of rows) {
+      for (const row of rowsForCommit) {
         const data = {
           kodeSiman: row.kodeSiman,
           kodeBarang: row.kodeBarang,
@@ -430,23 +463,23 @@ export async function commitPreview(actor: Actor, batchId: string) {
           noSeri: row.noSeri,
           tahun: row.tahun,
           nilaiPerolehan: row.nilaiPerolehan,
-          lokasiSiman: row.lokasiSiman,
           kondisiSiman: row.kondisiSiman,
           statusAset: row.statusAset,
           catatan: row.catatan,
+          dataMentah: (row.dataMentah ?? []) as unknown as Prisma.InputJsonValue,
           syncStatus: "TERSINKRON" as const,
           snapshotAt: batch.snapshotAt,
           lastSyncAt: now,
         };
 
         if (row.kodeRegister) {
-          await tx.barangLama.upsert({
+          await tx.masterAset.upsert({
             where: { kodeRegister: row.kodeRegister },
             update: data,
             create: { kodeRegister: row.kodeRegister, ...data },
           });
         } else if (row.kodeBarang && row.kodeSiman) {
-          await tx.barangLama.upsert({
+          await tx.masterAset.upsert({
             where: { kodeBarang_kodeSiman: { kodeBarang: row.kodeBarang, kodeSiman: row.kodeSiman } },
             update: data,
             create: { ...data, kodeBarang: row.kodeBarang, kodeSiman: row.kodeSiman },
@@ -457,7 +490,7 @@ export async function commitPreview(actor: Actor, batchId: string) {
       }
 
       if (registers.length > 0) {
-        await tx.barangLama.updateMany({
+        await tx.masterAset.updateMany({
           where: {
             kodeRegister: { not: null, notIn: registers },
             ...(config.SATKER_KODE ? { kodeSatker: config.SATKER_KODE } : {}),

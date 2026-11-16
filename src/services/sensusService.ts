@@ -1,10 +1,15 @@
-import type { BarangLamaWhereInput } from "../generated/prisma/models.js";
+import { config } from "../lib/config.js";
 import { prisma } from "../lib/prisma.js";
-import type { RoomAssetsQuery, SensusUpsertInput } from "../schemas/sensus.js";
+import type {
+  CreateSensusGrupInput,
+  KandidatQuery,
+  UpdateSensusGrupInput,
+} from "../schemas/sensus.js";
 import { ApiError } from "../utils/apiError.js";
 
-const SENSUS_SELECT = {
+const SENSUS_ROW_SELECT = {
   id: true,
+  grupId: true,
   status: true,
   jumlahFisik: true,
   kondisi: true,
@@ -17,11 +22,39 @@ const SENSUS_SELECT = {
   catatan: true,
   diverifikasiAt: true,
   updatedAt: true,
+  masterAset: {
+    select: {
+      id: true,
+      kodeRegister: true,
+      kodeBarang: true,
+      kodeSiman: true,
+      nama: true,
+      kategori: true,
+      statusAset: true,
+    },
+  },
   diinputOleh: { select: { id: true, nama: true } },
   diverifikasiOleh: { select: { id: true, nama: true } },
 } as const;
 
-const ASSET_SELECT = {
+const GROUP_SELECT = {
+  id: true,
+  ruangId: true,
+  kodeBarang: true,
+  namaBarang: true,
+  kondisi: true,
+  jumlah: true,
+  status: true,
+  docsComplete: true,
+  catatan: true,
+  catatanOtomatis: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: { select: { id: true, nama: true } },
+  sensus: { select: SENSUS_ROW_SELECT, orderBy: { createdAt: "asc" as const } },
+} as const;
+
+const MASTER_SELECT = {
   id: true,
   kodeRegister: true,
   kodeBarang: true,
@@ -32,23 +65,19 @@ const ASSET_SELECT = {
   noSeri: true,
   tahun: true,
   nilaiPerolehan: true,
-  lokasiSiman: true,
   kondisiSiman: true,
   statusAset: true,
-  ruangId: true,
-  parentAsetId: true,
   syncStatus: true,
-  sensus: { select: SENSUS_SELECT },
+  sensus: { select: SENSUS_ROW_SELECT },
 } as const;
 
 export interface Actor {
   id: string;
 }
 
-/** Pohon bangunan → ruang (termasuk ruang virtual) untuk halaman /hierarki. */
 export async function getHierarchy() {
   const [buildings, tanah] = await Promise.all([
-    prisma.barangLama.findMany({
+    prisma.masterAset.findMany({
       where: {
         OR: [
           { kodeBarang: { startsWith: "4" } },
@@ -62,7 +91,7 @@ export async function getHierarchy() {
         kodeRegister: true,
         nama: true,
         kategori: true,
-        sensus: { select: SENSUS_SELECT },
+        sensus: { select: SENSUS_ROW_SELECT },
         ruangAnak: {
           select: {
             id: true,
@@ -73,14 +102,14 @@ export async function getHierarchy() {
             luas: true,
             lantai: true,
             urutan: true,
-            _count: { select: { aset: true, sensus: true } },
+            _count: { select: { sensus: true, grup: true } },
           },
           orderBy: [{ lantai: "asc" }, { urutan: "asc" }, { kode: "asc" }],
         },
       },
       orderBy: { nama: "asc" },
     }),
-    prisma.barangLama.findMany({
+    prisma.masterAset.findMany({
       where: { kodeBarang: { startsWith: "2" } },
       select: {
         id: true,
@@ -89,7 +118,7 @@ export async function getHierarchy() {
         kodeRegister: true,
         nama: true,
         kategori: true,
-        sensus: { select: SENSUS_SELECT },
+        sensus: { select: SENSUS_ROW_SELECT },
       },
       orderBy: { nama: "asc" },
     }),
@@ -112,30 +141,27 @@ export async function getHierarchy() {
       luas: room.luas,
       lantai: room.lantai,
       urutan: room.urutan,
-      jumlahAset: room._count.aset,
-      jumlahSensus: room._count.sensus,
+      jumlahGrup: room._count.grup,
+      jumlahNup: room._count.sensus,
     })),
   }));
-
-  const totalRuang = mappedBuildings.reduce((sum, building) => sum + building.ruang.length, 0);
-  const totalAsetRuang = mappedBuildings.reduce(
-    (sum, building) => sum + building.ruang.reduce((n, room) => n + room.jumlahAset, 0),
-    0,
-  );
 
   return {
     buildings: mappedBuildings,
     tanah,
     total: {
       bangunan: mappedBuildings.length,
-      ruang: totalRuang,
-      asetDiRuang: totalAsetRuang,
+      ruang: mappedBuildings.reduce((sum, building) => sum + building.ruang.length, 0),
+      nupDisensus: mappedBuildings.reduce(
+        (sum, building) => sum + building.ruang.reduce((n, room) => n + room.jumlahNup, 0),
+        0,
+      ),
       tanah: tanah.length,
     },
   };
 }
 
-export async function getRuangWithAssets(ruangId: string, query: RoomAssetsQuery) {
+export async function getRuangData(ruangId: string) {
   const room = await prisma.ruang.findUnique({
     where: { id: ruangId },
     select: {
@@ -148,224 +174,271 @@ export async function getRuangWithAssets(ruangId: string, query: RoomAssetsQuery
       lantai: true,
       urutan: true,
       bangunanAsetId: true,
-      bangunanAset: { select: ASSET_SELECT },
-      _count: { select: { aset: true, sensus: true } },
+      bangunanAset: { select: MASTER_SELECT },
+      grup: { select: GROUP_SELECT, orderBy: { createdAt: "desc" } },
+      sensus: { select: SENSUS_ROW_SELECT, orderBy: { createdAt: "asc" } },
+      _count: { select: { sensus: true, grup: true } },
     },
   });
-
   if (!room) throw ApiError.notFound("Ruang tidak ditemukan");
 
-  const where: BarangLamaWhereInput = { ruangId };
+  const { bangunanAset, ...ruang } = room;
+  return { ruang, gedung: bangunanAset, groups: room.grup, items: room.sensus };
+}
 
-  if (query.q) {
-    where.OR = [
-      { nama: { contains: query.q, mode: "insensitive" } },
-      { kodeRegister: { contains: query.q, mode: "insensitive" } },
-      { kodeSiman: { contains: query.q, mode: "insensitive" } },
-      { kodeBarang: { contains: query.q, mode: "insensitive" } },
-    ];
+/** Kandidat kodeBarang dengan NUP yang belum disensus, dihitung global. */
+export async function getKandidat(query: KandidatQuery) {
+  const assets = await prisma.masterAset.findMany({
+    where: {
+      kodeBarang: { not: null },
+      statusAset: { contains: "aktif", mode: "insensitive" },
+      ...(config.SATKER_KODE ? { kodeSatker: config.SATKER_KODE } : {}),
+      sensus: { is: null },
+      ...(query.q
+        ? {
+            OR: [
+              { nama: { contains: query.q, mode: "insensitive" as const } },
+              { kodeBarang: { contains: query.q, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    },
+    select: { kodeBarang: true, nama: true, kategori: true },
+  });
+
+  const map = new Map<string, { kodeBarang: string; nama: string; kategori: string | null; tersedia: number }>();
+  for (const asset of assets) {
+    const kode = asset.kodeBarang;
+    if (!kode) continue;
+    const current = map.get(kode);
+    if (current) current.tersedia += 1;
+    else map.set(kode, { kodeBarang: kode, nama: asset.nama, kategori: asset.kategori, tersedia: 1 });
   }
 
-  if (query.status === "BELUM") where.sensus = { is: null };
-  if (query.status === "SUDAH") where.sensus = { isNot: null };
-
-  const [items, total] = await prisma.$transaction([
-    prisma.barangLama.findMany({
-      where,
-      select: ASSET_SELECT,
-      orderBy: [{ nama: "asc" }, { id: "asc" }],
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
-    }),
-    prisma.barangLama.count({ where }),
-  ]);
-
-  const { bangunanAset, ...roomInfo } = room;
-
   return {
-    ruang: roomInfo,
-    gedung: bangunanAset,
-    items,
-    total,
-    page: query.page,
-    limit: query.limit,
+    items: [...map.values()].sort((a, b) => b.tersedia - a.tersedia || a.nama.localeCompare(b.nama)),
+    total: map.size,
   };
 }
 
-function historyValue(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  return String(value);
+export async function createSensusGrup(
+  actorId: string,
+  ruangId: string,
+  input: CreateSensusGrupInput,
+) {
+  const room = await prisma.ruang.findUnique({ where: { id: ruangId }, select: { id: true } });
+  if (!room) throw ApiError.notFound("Ruang tidak ditemukan");
+
+  const satker = config.SATKER_KODE ?? "";
+
+  const groups = await prisma.$transaction(
+    async (tx) => {
+      const created = [];
+
+      for (const row of input.rows) {
+        const available = await tx.$queryRaw<Array<{ id: string; nama: string; kodeSiman: string | null }>>`
+          SELECT id, nama, "kodeSiman"
+          FROM "MasterAset"
+          WHERE "kodeBarang" = ${row.kodeBarang}
+            AND "statusAset" ILIKE '%aktif%'
+            AND (${satker}::text = '' OR "kodeSatker" = ${satker})
+            AND NOT EXISTS (SELECT 1 FROM "Sensus" s WHERE s."masterAsetId" = "MasterAset".id)
+          ORDER BY COALESCE(NULLIF(regexp_replace(COALESCE("kodeSiman", ''), '[^0-9]', '', 'g'), ''), '0')::int DESC,
+                   "kodeSiman" DESC
+          LIMIT ${row.jumlah}
+          FOR UPDATE SKIP LOCKED
+        `;
+
+        if (available.length < row.jumlah) {
+          throw ApiError.badRequest(
+            `NUP tidak mencukupi untuk ${row.kodeBarang}: diminta ${row.jumlah}, tersedia ${available.length}, kurang ${row.jumlah - available.length}.`,
+            {
+              kodeBarang: row.kodeBarang,
+              diminta: row.jumlah,
+              tersedia: available.length,
+              kurang: row.jumlah - available.length,
+            },
+          );
+        }
+
+        const namaBarang = available[0]?.nama ?? row.kodeBarang;
+        const group = await tx.sensusGrup.create({
+          data: {
+            ruangId,
+            kodeBarang: row.kodeBarang,
+            namaBarang,
+            kondisi: row.kondisi,
+            jumlah: row.jumlah,
+            status: "ASSESSED",
+            catatan: row.catatan ?? null,
+            createdById: actorId,
+            sensus: {
+              create: available.map((asset) => ({
+                masterAsetId: asset.id,
+                ruangId,
+                status: "ASSESSED" as const,
+                jumlahFisik: 1,
+                kondisi: row.kondisi,
+                statusMatch: "COCOK" as const,
+                diinputOlehId: actorId,
+              })),
+            },
+          },
+          select: GROUP_SELECT,
+        });
+
+        const sisa = await tx.masterAset.count({
+          where: {
+            kodeBarang: row.kodeBarang,
+            statusAset: { contains: "aktif", mode: "insensitive" },
+            ...(config.SATKER_KODE ? { kodeSatker: config.SATKER_KODE } : {}),
+            sensus: { is: null },
+          },
+        });
+        if (sisa > 0) {
+          await tx.sensusGrup.update({
+            where: { id: group.id },
+            data: { catatanOtomatis: `Sisa NUP tersedia: ${sisa}` },
+          });
+        }
+        created.push(group);
+      }
+
+      return created;
+    },
+    { timeout: 60_000, maxWait: 10_000 },
+  );
+
+  return { groups };
 }
 
-/** Upsert sensus per aset. Edit setelah VALIDATED/DOCS_COMPLETE → reset ASSESSED + EditHistory. */
-export async function upsertSensus(actorId: string, barangLamaId: string, input: SensusUpsertInput) {
-  const asset = await prisma.barangLama.findUnique({
-    where: { id: barangLamaId },
-    select: { id: true, nama: true, ruangId: true },
-  });
-  if (!asset) throw ApiError.notFound("Aset tidak ditemukan");
-
-  const existing = await prisma.sensus.findUnique({
-    where: { barangLamaId },
+export async function updateSensusGrup(grupId: string, input: UpdateSensusGrupInput) {
+  const group = await prisma.sensusGrup.findUnique({
+    where: { id: grupId },
     select: {
       id: true,
       status: true,
-      jumlahFisik: true,
-      kondisi: true,
-      statusMatch: true,
-      isTemuanBaru: true,
-      docsNote: true,
-      catatan: true,
-      docsComplete: true,
-      diverifikasiOlehId: true,
-      diverifikasiAt: true,
+      sensus: { select: { id: true, labelPrintedAt: true, diverifikasiAt: true } },
     },
   });
-
-  const reset = existing?.status === "VALIDATED" || existing?.status === "DOCS_COMPLETE";
-  const nextStatus = reset ? "ASSESSED" : input.status;
-
-  const jumlahFisik =
-    input.jumlahFisik !== undefined ? input.jumlahFisik : (existing?.jumlahFisik ?? null);
-  const kondisi = input.kondisi !== undefined ? input.kondisi : (existing?.kondisi ?? null);
-  const docsNote =
-    input.docsNote !== undefined
-      ? input.docsNote
-      : nextStatus === "TIDAK_DITEMUKAN"
-        ? (existing?.docsNote ?? null)
-        : null;
-  const catatan = input.catatan !== undefined ? input.catatan : (existing?.catatan ?? null);
-  const isTemuanBaru = input.isTemuanBaru ?? existing?.isTemuanBaru ?? false;
-  const statusMatch =
-    isTemuanBaru || input.statusMatch === "TEMUAN_BARU"
-      ? "TEMUAN_BARU"
-      : input.statusMatch !== undefined
-        ? input.statusMatch
-        : (existing?.statusMatch ?? null);
-
-  if (nextStatus === "ASSESSED" && (jumlahFisik === null || kondisi === null)) {
-    throw ApiError.badRequest("Jumlah fisik dan kondisi wajib diisi untuk status ASSESSED");
-  }
-  if (nextStatus === "TIDAK_DITEMUKAN" && (!docsNote || docsNote.trim() === "")) {
-    throw ApiError.badRequest("Catatan dokumen (docsNote) wajib diisi untuk TIDAK_DITEMUKAN");
-  }
-
-  const data = {
-    status: nextStatus,
-    jumlahFisik,
-    kondisi,
-    statusMatch,
-    isTemuanBaru: isTemuanBaru || statusMatch === "TEMUAN_BARU",
-    docsNote,
-    catatan,
-    ruangId: asset.ruangId,
-    diinputOlehId: actorId,
-    ...(reset
-      ? { docsComplete: false, diverifikasiOlehId: null, diverifikasiAt: null }
-      : {}),
-  };
-
-  const result = await prisma.$transaction(async (tx) => {
-    const updated = await tx.sensus.upsert({
-      where: { barangLamaId },
-      update: data,
-      create: { barangLamaId, ...data },
-      select: SENSUS_SELECT,
-    });
-
-    if (reset && existing) {
-      const changes: Array<[string, unknown, unknown]> = [
-        ["status", existing.status, data.status],
-        ["jumlahFisik", existing.jumlahFisik, data.jumlahFisik],
-        ["kondisi", existing.kondisi, data.kondisi],
-        ["statusMatch", existing.statusMatch, data.statusMatch],
-        ["isTemuanBaru", existing.isTemuanBaru, data.isTemuanBaru],
-        ["docsNote", existing.docsNote, data.docsNote],
-        ["catatan", existing.catatan, data.catatan],
-      ];
-
-      for (const [field, before, after] of changes) {
-        if (historyValue(before) === historyValue(after)) continue;
-        await tx.editHistory.create({
-          data: {
-            sensusId: updated.id,
-            olehId: actorId,
-            field,
-            nilaiLama: historyValue(before),
-            nilaiBaru: historyValue(after),
-          },
-        });
-      }
-    }
-
-    return updated;
-  }, { timeout: 30_000 });
-
-  return { sensus: result, asset: { id: asset.id, nama: asset.nama } };
-}
-
-/** Verifikasi admin: DOCS_COMPLETE → VALIDATED; TIDAK_DITEMUKAN tetap (bypass label). */
-export async function verifySensus(actorId: string, barangLamaId: string) {
-  const existing = await prisma.sensus.findUnique({
-    where: { barangLamaId },
-    select: { id: true, status: true, docsComplete: true },
-  });
-  if (!existing) throw ApiError.notFound("Sensus tidak ditemukan");
-
-  if (existing.status !== "DOCS_COMPLETE" && existing.status !== "TIDAK_DITEMUKAN") {
-    throw ApiError.conflict(
-      "Hanya sensus DOCS_COMPLETE atau TIDAK_DITEMUKAN yang bisa diverifikasi",
-    );
-  }
-
-  const updated = await prisma.sensus.update({
-    where: { barangLamaId },
-    data: {
-      ...(existing.status === "DOCS_COMPLETE"
-        ? { status: "VALIDATED" as const, docsComplete: true }
-        : {}),
-      diverifikasiOlehId: actorId,
-      diverifikasiAt: new Date(),
-    },
-    select: SENSUS_SELECT,
-  });
-
-  return { sensus: updated };
-}
-
-/** Tolak verifikasi → kembali ASSESSED + EditHistory alasan. */
-export async function rejectSensus(actorId: string, barangLamaId: string, catatan: string) {
-  const existing = await prisma.sensus.findUnique({
-    where: { barangLamaId },
-    select: { id: true, status: true },
-  });
-  if (!existing) throw ApiError.notFound("Sensus tidak ditemukan");
-  if (!["VALIDATED", "DOCS_COMPLETE", "TIDAK_DITEMUKAN"].includes(existing.status)) {
-    throw ApiError.conflict("Sensus belum siap diverifikasi/ditolak");
+  if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
+  if (
+    group.status === "VALIDATED" ||
+    group.sensus.some((row) => row.labelPrintedAt || row.diverifikasiAt)
+  ) {
+    throw ApiError.conflict("Grup sudah divalidasi/dilabeli, tidak bisa diubah");
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.sensus.update({
-      where: { barangLamaId },
+    const result = await tx.sensusGrup.update({
+      where: { id: grupId },
+      data: {
+        ...(input.kondisi ? { kondisi: input.kondisi } : {}),
+        ...(input.catatan !== undefined ? { catatan: input.catatan } : {}),
+      },
+      select: GROUP_SELECT,
+    });
+    if (input.kondisi) {
+      await tx.sensus.updateMany({ where: { grupId }, data: { kondisi: input.kondisi } });
+    }
+    return result;
+  });
+
+  return { group: updated };
+}
+
+export async function deleteSensusGrup(grupId: string) {
+  const group = await prisma.sensusGrup.findUnique({
+    where: { id: grupId },
+    select: {
+      id: true,
+      status: true,
+      sensus: { select: { labelPrintedAt: true, labelAppliedAt: true, diverifikasiAt: true } },
+    },
+  });
+  if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
+  if (
+    group.status === "VALIDATED" ||
+    group.sensus.some((row) => row.labelPrintedAt || row.labelAppliedAt || row.diverifikasiAt)
+  ) {
+    throw ApiError.conflict("Grup sudah divalidasi/dilabeli, tidak bisa dihapus");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.sensus.deleteMany({ where: { grupId } });
+    await tx.sensusGrup.delete({ where: { id: grupId } });
+  });
+
+  return { deleted: true };
+}
+
+export async function verifySensusGrup(actorId: string, grupId: string) {
+  const group = await prisma.sensusGrup.findUnique({
+    where: { id: grupId },
+    select: { id: true, status: true },
+  });
+  if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
+  if (group.status !== "DOCS_COMPLETE") {
+    throw ApiError.conflict("Hanya grup DOCS_COMPLETE yang bisa diverifikasi");
+  }
+
+  const now = new Date();
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.sensus.updateMany({
+      where: { grupId },
+      data: {
+        status: "VALIDATED",
+        diverifikasiOlehId: actorId,
+        diverifikasiAt: now,
+      },
+    });
+    return tx.sensusGrup.update({
+      where: { id: grupId },
+      data: { status: "VALIDATED", docsComplete: true },
+      select: GROUP_SELECT,
+    });
+  });
+
+  return { group: updated };
+}
+
+export async function rejectSensusGrup(actorId: string, grupId: string, catatan: string) {
+  const group = await prisma.sensusGrup.findUnique({
+    where: { id: grupId },
+    select: { id: true, status: true, sensus: { select: { id: true } } },
+  });
+  if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
+  if (group.status !== "VALIDATED" && group.status !== "DOCS_COMPLETE") {
+    throw ApiError.conflict("Grup belum siap diverifikasi/ditolak");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.sensus.updateMany({
+      where: { grupId },
       data: {
         status: "ASSESSED",
         docsComplete: false,
         diverifikasiOlehId: null,
         diverifikasiAt: null,
       },
-      select: SENSUS_SELECT,
     });
-    await tx.editHistory.create({
-      data: {
-        sensusId: existing.id,
-        olehId: actorId,
-        field: "verifikasi",
-        nilaiLama: existing.status,
-        nilaiBaru: `DITOLAK: ${catatan}`,
-      },
+    for (const row of group.sensus) {
+      await tx.editHistory.create({
+        data: {
+          sensusId: row.id,
+          olehId: actorId,
+          field: "verifikasi",
+          nilaiLama: group.status,
+          nilaiBaru: `DITOLAK: ${catatan}`,
+        },
+      });
+    }
+    return tx.sensusGrup.update({
+      where: { id: grupId },
+      data: { status: "ASSESSED", docsComplete: false },
+      select: GROUP_SELECT,
     });
-    return result;
   });
 
-  return { sensus: updated };
+  return { group: updated };
 }

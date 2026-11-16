@@ -1,69 +1,81 @@
-import type { SensusWhereInput } from "../generated/prisma/models.js";
+import type { SensusGrupWhereInput, SensusWhereInput } from "../generated/prisma/models.js";
 import { prisma } from "../lib/prisma.js";
 import type { DashboardQuery, DashboardTab } from "../schemas/dashboard.js";
 
-const TAB_WHERE: Record<DashboardTab, SensusWhereInput> = {
+const GROUP_WHERE: Partial<Record<DashboardTab, SensusGrupWhereInput>> = {
   PERLU_DOKUMEN: { status: "ASSESSED", docsComplete: false },
-  PERLU_VERIFIKASI: {
-    OR: [
-      { status: "DOCS_COMPLETE" },
-      { status: "TIDAK_DITEMUKAN", diverifikasiAt: null },
-    ],
-  },
-  PERLU_CETAK: { status: "VALIDATED", labelPrintedAt: null, isTemuanBaru: false },
-  PERLU_TEMPEL: {
-    status: "VALIDATED",
-    labelPrintedAt: { not: null },
-    labelAppliedAt: null,
-  },
+  PERLU_VERIFIKASI: { status: "DOCS_COMPLETE" },
 };
 
-const DASHBOARD_SELECT = {
+const NUP_WHERE: Partial<Record<DashboardTab, SensusWhereInput>> = {
+  PERLU_CETAK: { status: "VALIDATED", labelPrintedAt: null, isTemuanBaru: false },
+  PERLU_TEMPEL: { status: "VALIDATED", labelPrintedAt: { not: null }, labelAppliedAt: null },
+};
+
+const RUANG_SELECT = {
   id: true,
-  status: true,
-  jumlahFisik: true,
-  kondisi: true,
-  statusMatch: true,
-  isTemuanBaru: true,
-  docsComplete: true,
-  labelPrintedAt: true,
-  labelAppliedAt: true,
-  updatedAt: true,
-  barangLama: {
-    select: {
-      id: true,
-      kodeRegister: true,
-      kodeBarang: true,
-      kodeSiman: true,
-      nama: true,
-      kategori: true,
-      kodeSatker: true,
-      statusAset: true,
-      ruang: {
-        select: {
-          id: true,
-          kode: true,
-          nama: true,
-          lantai: true,
-          bangunanAset: { select: { id: true, nama: true } },
-        },
-      },
-    },
-  },
-  diinputOleh: { select: { id: true, nama: true } },
+  kode: true,
+  nama: true,
+  lantai: true,
+  bangunanAset: { select: { nama: true } },
 } as const;
 
 export async function getDashboard(query: DashboardQuery) {
-  const counts = await Promise.all(
-    (Object.keys(TAB_WHERE) as DashboardTab[]).map(async (tab) => [
-      tab,
-      await prisma.sensus.count({ where: TAB_WHERE[tab] }),
-    ] as const),
-  );
+  const counts = await Promise.all([
+    prisma.sensusGrup.count({ where: GROUP_WHERE.PERLU_DOKUMEN }),
+    prisma.sensusGrup.count({ where: GROUP_WHERE.PERLU_VERIFIKASI }),
+    prisma.sensus.count({ where: NUP_WHERE.PERLU_CETAK }),
+    prisma.sensus.count({ where: NUP_WHERE.PERLU_TEMPEL }),
+  ]);
 
-  const where: SensusWhereInput = { ...TAB_WHERE[query.tab] };
+  const countMap = {
+    PERLU_DOKUMEN: counts[0],
+    PERLU_VERIFIKASI: counts[1],
+    PERLU_CETAK: counts[2],
+    PERLU_TEMPEL: counts[3],
+  };
+
+  const page = query.page;
+  const limit = query.limit;
+  const skip = (page - 1) * limit;
+
+  if (query.tab === "PERLU_DOKUMEN" || query.tab === "PERLU_VERIFIKASI") {
+    const where: SensusGrupWhereInput = { ...(GROUP_WHERE[query.tab] ?? {}) };
+    if (query.q) {
+      where.OR = [
+        { kodeBarang: { contains: query.q, mode: "insensitive" } },
+        { namaBarang: { contains: query.q, mode: "insensitive" } },
+      ];
+    }
+    const [items, total] = await prisma.$transaction([
+      prisma.sensusGrup.findMany({
+        where,
+        select: {
+          id: true, kodeBarang: true, namaBarang: true, kondisi: true, jumlah: true,
+          status: true, docsComplete: true, catatan: true, catatanOtomatis: true, updatedAt: true,
+          ruang: { select: RUANG_SELECT },
+          createdBy: { select: { nama: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.sensusGrup.count({ where }),
+    ]);
+    return {
+      counts: countMap,
+      tab: query.tab,
+      kind: "GROUP" as const,
+      items: items.map((item) => ({ ...item, kind: "GROUP" as const })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  const where: SensusWhereInput = { ...(NUP_WHERE[query.tab] ?? {}) };
   if (query.q) {
-    where.barangLama = {
+    where.masterAset = {
       OR: [
         { nama: { contains: query.q, mode: "insensitive" } },
         { kodeRegister: { contains: query.q, mode: "insensitive" } },
@@ -76,20 +88,28 @@ export async function getDashboard(query: DashboardQuery) {
   const [items, total] = await prisma.$transaction([
     prisma.sensus.findMany({
       where,
-      select: DASHBOARD_SELECT,
+      select: {
+        id: true, status: true, labelPrintedAt: true, labelAppliedAt: true, updatedAt: true,
+        masterAset: {
+          select: { id: true, kodeRegister: true, kodeBarang: true, kodeSiman: true, nama: true, kategori: true },
+        },
+        ruang: { select: RUANG_SELECT },
+        grup: { select: { id: true, kondisi: true, jumlah: true } },
+      },
       orderBy: { updatedAt: "desc" },
-      skip: (query.page - 1) * query.limit,
-      take: query.limit,
+      skip,
+      take: limit,
     }),
     prisma.sensus.count({ where }),
   ]);
 
   return {
-    counts: Object.fromEntries(counts),
+    counts: countMap,
     tab: query.tab,
-    items,
+    kind: "NUP" as const,
+    items: items.map((item) => ({ ...item, kind: "NUP" as const })),
     total,
-    page: query.page,
-    limit: query.limit,
+    page,
+    limit,
   };
 }

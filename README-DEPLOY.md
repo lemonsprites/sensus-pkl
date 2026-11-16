@@ -72,10 +72,12 @@ Policy service account minimal:
 
 - Login sebagai ADMIN/SUPERADMIN → menu **Import SIMAN**.
 - Upload `.xlsx`/`.csv` (kolom minimal: Kode Register, Kode Barang, NUP, Nama Barang, Kode Satker).
-- Preview disimpan di Redis (`v1:inv:import:<batchId>`, TTL 2 jam) + backup MinIO (`inventaris-staging`).
+- Semua baris masuk ke **`MasterAset`** (SSOT; tidak diubah oleh sensus).
+- **Semua kolom asli disimpan di `MasterAset.dataMentah`** sebagai array `{header,value,column}`. Tidak ada kolom Excel yang dibuang; `ImportBatch.headers` menyimpan daftar header untuk audit.
+- Preview disimpan di Redis (`v1:inv:import:<batchId>`, TTL 2 jam) + backup MinIO (`inventaris-staging`). Metadata lengkap dibaca dari MinIO saat commit agar Redis tetap ringan.
 - Redis flush/evict → GET preview/commit otomatis restore dari MinIO.
 - Commit transaksional oleh `kodeRegister` (fallback composite), baris yang hilang dari file baru ditandai `HILANG_DI_SIMAN`.
-- Import **tidak menimpa** field sensus (jumlahFisik, kondisi, statusMatch, docsComplete, labelAppliedAt, foto).
+- Import **tidak menimpa** data sensus dan tidak mengisi ruang.
 
 ## 6. Seeding ruang (M3b)
 
@@ -83,21 +85,22 @@ Setelah import pertama:
 
 ```bash
 npm run seed:ruang -- --dry-run   # validasi mapping bangunan
-npm run seed:ruang                # upsert 65 ruang + 1 ruang global
+npm run seed:ruang                # upsert 65 ruang kosong
 ```
 
-Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Satu ruang virtual global:
-- `TANPA.00.00.00` global untuk aset tanpa petunjuk gedung (mayoritas 6xx).
+Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Semua ruang dibuat **kosong**; tidak ada mapping aset dan tidak ada ruang virtual.
 
 ## 7. Alur sensus
 
-1. Login → **Hierarki** → pilih ruang (atau Sensus Gedung).
-2. Isi jumlah/kondisi → **Simpan & Tandai Diperiksa** (ASSESSED).
-3. Upload minimal 1 foto → status **DOCS_COMPLETE** otomatis.
-4. ADMIN/SUPERADMIN verifikasi → **VALIDATED** (TIDAK_DITEMUKAN bypass, wajib catatan).
-5. **Dashboard** 4 tab: Perlu Dokumen, Perlu Verifikasi, Perlu Cetak, Perlu Tempel.
-6. **Label**: gate ketat NUP valid + unik per kode barang + aktif + satker cocok + VALIDATED + bukan temuan baru. QR = Kode Register SIMAN.
-7. **Scan**: masukkan Kode Register untuk verifikasi aset/ruang/status/gate.
+1. Login → **Hierarki** → pilih ruang.
+2. Pilih jenis aset (kandidat global per `kodeBarang`), isi **kondisi + jumlah** per baris (mis. 12 BAIK, 3 RUSAK_RINGAN).
+3. Submit → sistem mengambil **NUP terakhir yang belum disensus** (numerik menurun) dan membuat satu baris `Sensus` per NUP dengan `ruangId` ruang tersebut. `MasterAset` tidak diubah.
+4. Jika NUP kurang → transaksi rollback, 422 + catatan shortfall (diminta/tersedia/kurang). Sisa NUP yang tidak diminta tetap belum disensus.
+5. Foto grup → grup **DOCS_COMPLETE**, semua NUP dalam grup ikut.
+6. ADMIN/SUPERADMIN verifikasi grup → semua NUP **VALIDATED**.
+7. **Dashboard** 4 tab: Perlu Dokumen, Perlu Verifikasi, Perlu Cetak, Perlu Tempel.
+8. **Label**: gate ketat NUP valid + unik per kode barang + aktif + satker cocok + VALIDATED + bukan temuan baru. QR = Kode Register SIMAN.
+9. **Scan**: masukkan Kode Register untuk verifikasi aset/ruang/status/gate.
 
 ## 8. Health & smoke test
 

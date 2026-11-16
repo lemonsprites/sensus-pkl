@@ -59,7 +59,6 @@ interface EditForm {
   noSeri: string;
   tahun: string;
   nilaiPerolehan: string;
-  lokasiSiman: string;
   kondisiSiman: string;
   statusAset: string;
   catatan: string;
@@ -77,7 +76,6 @@ const EMPTY_FORM: EditForm = {
   noSeri: "",
   tahun: "",
   nilaiPerolehan: "",
-  lokasiSiman: "",
   kondisiSiman: "",
   statusAset: "",
   catatan: "",
@@ -113,7 +111,6 @@ function toForm(row: ImportRow): EditForm {
     noSeri: row.noSeri ?? "",
     tahun: row.tahun === null ? "" : String(row.tahun),
     nilaiPerolehan: row.nilaiPerolehan ?? "",
-    lokasiSiman: row.lokasiSiman ?? "",
     kondisiSiman: row.kondisiSiman ?? "",
     statusAset: row.statusAset ?? "",
     catatan: row.catatan ?? "",
@@ -283,7 +280,6 @@ export default function ImportPage() {
       kodeSatker: form.kodeSatker,
       merk: form.merk,
       noSeri: form.noSeri,
-      lokasiSiman: form.lokasiSiman,
       kondisiSiman: form.kondisiSiman,
       statusAset: form.statusAset,
       catatan: form.catatan,
@@ -442,7 +438,6 @@ export default function ImportPage() {
                           ["noSeri", "No Seri"],
                           ["tahun", "Tahun"],
                           ["nilaiPerolehan", "Nilai Perolehan"],
-                          ["lokasiSiman", "Lokasi Ruang"],
                           ["kondisiSiman", "Kondisi"],
                           ["statusAset", "Status BMN"],
                           ["catatan", "Catatan"],
@@ -485,7 +480,6 @@ export default function ImportPage() {
                     <TableHead>Kode Register / NUP</TableHead>
                     <TableHead>Nama</TableHead>
                     <TableHead>Kategori</TableHead>
-                    <TableHead>Lokasi</TableHead>
                     <TableHead>Validasi</TableHead>
                     <TableHead className="text-right">Aksi</TableHead>
                   </TableRow>
@@ -504,9 +498,6 @@ export default function ImportPage() {
                           <div className="text-xs text-muted-foreground">{row.kodeBarang ?? "—"}</div>
                         </TableCell>
                         <TableCell className="text-xs">{row.kategori ?? "—"}</TableCell>
-                        <TableCell className="max-w-52 truncate text-xs" title={row.lokasiSiman ?? ""}>
-                          {row.lokasiSiman ?? "—"}
-                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             {row.errors.length > 0 ? (
@@ -536,7 +527,7 @@ export default function ImportPage() {
                       </TableRow>
                     ))
                   ) : (
-                    <TableEmpty colSpan={7}>Tidak ada baris.</TableEmpty>
+                    <TableEmpty colSpan={6}>Tidak ada baris.</TableEmpty>
                   )}
                 </TableBody>
               </Table>
