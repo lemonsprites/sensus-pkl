@@ -3,9 +3,11 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/auth/AuthProvider";
 import { AppLayout } from "@/components/AppLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import HierarchyPage from "@/pages/HierarchyPage";
 import ImportPage from "@/pages/ImportPage";
 import LoginPage from "@/pages/LoginPage";
 import ProfilPage from "@/pages/ProfilPage";
+import SensusRuangPage from "@/pages/SensusRuangPage";
 import UsersPage from "@/pages/UsersPage";
 
 export default function App() {
@@ -17,7 +19,9 @@ export default function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route path="/" element={<Navigate to="/profil" replace />} />
+              <Route path="/" element={<Navigate to="/hierarki" replace />} />
+              <Route path="/hierarki" element={<HierarchyPage />} />
+              <Route path="/sensus/:ruangId" element={<SensusRuangPage />} />
               <Route path="/profil" element={<ProfilPage />} />
 
               <Route element={<ProtectedRoute roles={["ADMIN", "SUPERADMIN"]} />}>
@@ -27,7 +31,7 @@ export default function App() {
             </Route>
           </Route>
 
-          <Route path="*" element={<Navigate to="/profil" replace />} />
+          <Route path="*" element={<Navigate to="/hierarki" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

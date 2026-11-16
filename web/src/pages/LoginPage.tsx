@@ -26,7 +26,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   if (loading) return <FullScreenLoader />;
-  if (user) return <Navigate to="/profil" replace />;
+  if (user) return <Navigate to="/hierarki" replace />;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -34,7 +34,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email.trim(), password);
-      navigate("/profil", { replace: true });
+      navigate("/hierarki", { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal login");
     } finally {

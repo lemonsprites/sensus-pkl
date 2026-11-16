@@ -9,7 +9,7 @@ export function ProtectedRoute({ roles }: { roles?: Role[] }) {
 
   if (loading) return <FullScreenLoader />;
   if (!user) return <Navigate to="/login" replace />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/profil" replace />;
+  if (roles && !roles.includes(user.role)) return <Navigate to="/hierarki" replace />;
 
   return <Outlet />;
 }

@@ -119,7 +119,7 @@ model BarangLama {
   lastSyncAt     DateTime?
   catatan        String?
 
-  sensus     Sensus[]
+  sensus     Sensus?
   /// Bangunan ini dipakai sebagai lokasi Ruang (Patch B).
   ruangAnak  Ruang[]   @relation("RuangBangunan")
   createdAt  DateTime  @default(now())
@@ -161,7 +161,7 @@ model Ruang {
 /// TODO(v1 §5): model Sensus provisional (M4–M7).
 model Sensus {
   id           String       @id @default(uuid())
-  barangLamaId String
+  barangLamaId String       @unique
   barangLama   BarangLama   @relation(fields: [barangLamaId], references: [id])
   ruangId      String?
   ruang        Ruang?       @relation(fields: [ruangId], references: [id])

@@ -1,4 +1,4 @@
-import { FileSpreadsheet, LogOut, ShieldCheck, UserRound, Users } from "lucide-react";
+import { Building2, FileSpreadsheet, LogOut, ShieldCheck, UserRound, Users } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/auth/auth-context";
@@ -36,6 +36,17 @@ export function AppLayout() {
           </div>
 
           <nav className="order-3 flex w-full items-center gap-1 text-sm sm:order-none sm:w-auto">
+            <NavLink
+              to="/hierarki"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                  isActive && "bg-muted font-medium",
+                )
+              }
+            >
+              <Building2 className="size-4" /> Hierarki
+            </NavLink>
             <NavLink
               to="/profil"
               className={({ isActive }) =>
