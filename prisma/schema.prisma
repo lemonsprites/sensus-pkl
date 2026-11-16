@@ -1,0 +1,231 @@
+// ============================================================================
+// SENSUS ASET BMN — Prisma schema
+// Acuan: agent-brief v1 §5 + Patch A (NUP composite), Patch B (hierarki tree),
+// Patch C (import staging Redis + MinIO).
+//
+// CATATAN: model User/Sensus/EditHistory masih provisional (brief v1 §5 belum
+// tersedia di repo). Field ditandai TODO(v1) — sesuaikan saat brief masuk.
+// Yang WAJIB tidak diubah tanpa patch: kodeSiman BUKAN @unique global.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  MAHASISWA
+  ADMIN
+  SUPERADMIN
+}
+
+/// Status sinkronisasi baris BarangLama terhadap snapshot SIMAN terakhir.
+enum SyncStatus {
+  SNAPSHOT_AWAL
+  TERSINKRON
+  HILANG_DI_SIMAN
+}
+
+/// State machine sensus: DRAFT → ASSESSED → DOCS_COMPLETE → VALIDATED.
+/// TIDAK_DITEMUKAN adalah jalur bypass (tidak perlu foto, wajib docsNote).
+enum SensusStatus {
+  DRAFT
+  ASSESSED
+  DOCS_COMPLETE
+  VALIDATED
+  TIDAK_DITEMUKAN
+}
+
+/// TODO(v1 §5): konfirmasi nilai enum kondisi fisik.
+enum Kondisi {
+  BAIK
+  RUSAK_RINGAN
+  RUSAK_BERAT
+}
+
+/// TODO(v1 §5): konfirmasi nilai statusMatch.
+enum StatusMatch {
+  COCOK
+  TIDAK_COCOK
+  TEMUAN_BARU
+}
+
+// ── User ────────────────────────────────────────────────────────────────────
+
+/// TODO(v1 §5): field User provisional; dipakai M2 (login + manajemen user).
+model User {
+  id           String   @id @default(uuid())
+  nama         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(MAHASISWA)
+  isActive     Boolean  @default(true)
+  /// Dinaikkan saat logout/reset password/deactivate → token lama invalid.
+  tokenVersion Int      @default(0)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sensusDiinput     Sensus[]      @relation("SensusDiinput")
+  sensusDiverifikasi Sensus[]     @relation("SensusDiverifikasi")
+  editHistory       EditHistory[]
+
+  @@index([role, isActive])
+}
+
+// ── Master SIMAN (Patch A + Patch B) ────────────────────────────────────────
+
+/// Snapshot baris SIMAN. Sumber kebenaran NUP tetap SIMAN v2.
+/// Patch A: NUP (kodeSiman) TIDAK unik global → unique komposit.
+model BarangLama {
+  id         String  @id @default(uuid())
+  /// NUP SIMAN. Nullable: baris tanpa NUP tetap boleh masuk.
+  kodeSiman  String?
+  /// Kode Register SIMAN (kolom BX export). Unik — dipakai sebagai isi QR label.
+  /// Terverifikasi 19.976/19.976 baris terisi & unik pada master_aset.xlsx.
+  kodeRegister String? @unique
+  /// 3xx (tanah) | 4xx (bangunan) | 5xx (peralatan).
+  kodeBarang String?
+  nama       String
+  kategori   String? // "Tanah" | "Bangunan" | "Peralatan"
+
+  // Hierarki aset (Patch B): tanah → bangunan.
+  parentAset   BarangLama?  @relation("HierarkiAset", fields: [parentAsetId], references: [id])
+  parentAsetId String?
+  childAset    BarangLama[] @relation("HierarkiAset")
+
+  // Lokasi peralatan (Patch B).
+  ruang   Ruang?  @relation("AsetDiRuang", fields: [ruangId], references: [id])
+  ruangId String?
+
+  // Field SIMAN lain (v1 §5).
+  kodeSatker     String?
+  jumlahLama     Int       @default(1)
+  merk           String?
+  noSeri         String?
+  tahun          Int?
+  nilaiPerolehan Decimal?  @db.Decimal(14, 2)
+  lokasiSiman    String?
+  kondisiSiman   String?
+  statusAset     String?
+  syncStatus     SyncStatus @default(SNAPSHOT_AWAL)
+  snapshotAt     DateTime?
+  lastSyncAt     DateTime?
+  catatan        String?
+
+  sensus     Sensus[]
+  /// Bangunan ini dipakai sebagai lokasi Ruang (Patch B).
+  ruangAnak  Ruang[]   @relation("RuangBangunan")
+  createdAt  DateTime  @default(now())
+
+  // Patch A: NUP hanya unik per kode barang.
+  @@unique([kodeBarang, kodeSiman])
+  @@index([kodeSiman])
+  @@index([nama])
+  @@index([parentAsetId])
+  @@index([ruangId])
+}
+
+/// Ruang flat + hierarki lokasi (Patch B): bangunanAsetId wajib, lantai Int.
+model Ruang {
+  id       String  @id @default(uuid())
+  kode     String  @unique // LAB.01.01.01 | auto-generated {PREFIX}.{LANTAI}.{URUT}
+  /// Kode Register SIMAN ruangan (kolom G ruangan.xlsx). Unik — isi QR ruangan.
+  kodeRegister String? @unique
+  nama     String
+  tipeRuang String?
+  luas     Decimal? @db.Decimal(10, 2)
+  pic      String?
+
+  bangunanAset   BarangLama @relation("RuangBangunan", fields: [bangunanAsetId], references: [id])
+  bangunanAsetId String
+  lantai         Int
+  urutan         Int        @default(0)
+
+  aset      BarangLama[] @relation("AsetDiRuang")
+  sensus    Sensus[]
+  createdAt DateTime    @default(now())
+
+  @@unique([bangunanAsetId, lantai, kode])
+  @@index([bangunanAsetId, lantai])
+}
+
+// ── Sensus ──────────────────────────────────────────────────────────────────
+
+/// TODO(v1 §5): model Sensus provisional (M4–M7).
+model Sensus {
+  id           String       @id @default(uuid())
+  barangLamaId String
+  barangLama   BarangLama   @relation(fields: [barangLamaId], references: [id])
+  ruangId      String?
+  ruang        Ruang?       @relation(fields: [ruangId], references: [id])
+
+  status       SensusStatus @default(DRAFT)
+  jumlahFisik  Int?
+  kondisi      Kondisi?
+  statusMatch  StatusMatch?
+  isTemuanBaru Boolean      @default(false)
+  docsComplete Boolean      @default(false)
+  /// Wajib untuk TIDAK_DITEMUKAN.
+  docsNote     String?
+  labelAppliedAt DateTime?
+  catatan      String?
+
+  diinputOlehId      String
+  diinputOleh        User    @relation("SensusDiinput", fields: [diinputOlehId], references: [id])
+  diverifikasiOlehId String?
+  diverifikasiOleh   User?   @relation("SensusDiverifikasi", fields: [diverifikasiOlehId], references: [id])
+  diverifikasiAt     DateTime?
+
+  editHistory EditHistory[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status])
+  @@index([statusMatch])
+  @@index([ruangId])
+  @@index([barangLamaId])
+}
+
+/// TODO(v1 §5): jejak edit setelah VALIDATED (reset ke ASSESSED).
+model EditHistory {
+  id        String   @id @default(uuid())
+  sensusId  String
+  sensus    Sensus   @relation(fields: [sensusId], references: [id], onDelete: Cascade)
+  olehId    String
+  oleh      User     @relation(fields: [olehId], references: [id])
+  field     String
+  nilaiLama String?
+  nilaiBaru String?
+  createdAt DateTime @default(now())
+
+  @@index([sensusId, createdAt])
+}
+
+// ── Import SIMAN (Patch C) ──────────────────────────────────────────────────
+
+/// Postgres hanya menyimpan audit batch. Staging row ada di Redis + MinIO.
+model ImportBatch {
+  id          String    @id @default(uuid())
+  filename    String
+  fileSize    Int
+  snapshotAt  DateTime
+  totalRows   Int
+  inserted    Int       @default(0)
+  updated     Int       @default(0)
+  skipped     Int       @default(0)
+  /// Maks 100 error pertama.
+  errors      Json?
+  status      String    @default("PREVIEW") // PREVIEW | COMMITTED | CANCELLED
+  importedBy  String
+  committedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, createdAt])
+}
