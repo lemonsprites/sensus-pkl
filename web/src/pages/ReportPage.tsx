@@ -216,6 +216,14 @@ export default function ReportPage() {
                 <div key={label} className="border p-2"><div className="text-muted-foreground">{label}</div><div className="text-lg font-semibold">{value}</div></div>
               ))}
             </div>
+            <h3 className="mb-3 mt-6 border-b pb-1 text-base font-bold uppercase">Ruang Lingkup dan Metodologi</h3>
+            <p className="mb-2 text-justify">
+              Sensus dilaksanakan pada ruang lingkup {report.meta.scope.gedung.length > 0 ? report.meta.scope.gedung.join(", ") : "seluruh gedung"} dengan membandingkan data SIMAN v2 terhadap kondisi fisik aset di lapangan. Setiap kelompok pencatatan memuat kode barang, kondisi, jumlah, ruang, dan NUP hasil alokasi. Bukti foto/dokumen diunggah per grup, kemudian diverifikasi oleh admin BMN sebelum dinyatakan valid.
+            </p>
+            <p className="mb-2 text-justify">
+              Data yang disajikan merupakan data aktual pada tanggal cetak. Perubahan setelah tanggal tersebut tidak tercakup. Rekonsiliasi akhir tetap mengacu pada SIMAN v2 sebagai sistem resmi.
+            </p>
+
             <h3 className="mb-3 mt-6 border-b pb-1 text-base font-bold uppercase">Hasil Sensus per Gedung</h3>
             <table className="w-full border-collapse text-xs">
               <thead><tr className="bg-muted">{["Gedung", "Ruang", "Grup", "NUP", "Baik", "Rusak Ringan", "Rusak Berat"].map((h) => <th key={h} className="border p-1 text-left">{h}</th>)}</tr></thead>

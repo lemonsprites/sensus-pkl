@@ -143,6 +143,9 @@ export async function buildReportDocx(data: ReportData): Promise<Buffer> {
     p(`Rincian kondisi: BAIK ${summary.conditions.BAIK.toLocaleString("id-ID")} unit, RUSAK RINGAN ${summary.conditions.RUSAK_RINGAN.toLocaleString("id-ID")} unit, dan RUSAK BERAT ${summary.conditions.RUSAK_BERAT.toLocaleString("id-ID")} unit.`),
     p(`Status validasi: ${summary.status.VALIDATED} grup tervalidasi, ${summary.status.DOCS_COMPLETE} grup menunggu verifikasi, ${summary.status.ASSESSED} grup dalam penilaian, dan ${summary.status.TIDAK_DITEMUKAN} grup tidak ditemukan.`),
     p(`Temuan yang perlu ditindaklanjuti: ${summary.findings} grup. Total dokumen pendukung: ${summary.totalDocs.toLocaleString("id-ID")} file.`),
+    heading("RUANG LINGKUP DAN METODOLOGI", HeadingLevel.HEADING_2),
+    p(`Sensus dilaksanakan pada ruang lingkup ${meta.scope.gedung.length > 0 ? meta.scope.gedung.join(", ") : "seluruh gedung"} dengan membandingkan data SIMAN v2 terhadap kondisi fisik aset di lapangan. Setiap kelompok pencatatan memuat kode barang, kondisi, jumlah, ruang, dan NUP hasil alokasi. Bukti foto/dokumen diunggah per grup, kemudian diverifikasi oleh admin BMN sebelum dinyatakan valid.`),
+    p("Data yang disajikan merupakan data aktual pada tanggal cetak. Perubahan setelah tanggal tersebut tidak tercakup. Rekonsiliasi akhir tetap mengacu pada SIMAN v2 sebagai sistem resmi."),
     heading("HASIL SENSUS PER GEDUNG", HeadingLevel.HEADING_2),
     table(
       ["Gedung", "Ruang", "Grup", "NUP", "Baik", "Rusak Ringan", "Rusak Berat"],
