@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/auth/AuthProvider";
 import { AppLayout } from "@/components/AppLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import ImportPage from "@/pages/ImportPage";
 import LoginPage from "@/pages/LoginPage";
 import ProfilPage from "@/pages/ProfilPage";
 import UsersPage from "@/pages/UsersPage";
@@ -20,6 +21,7 @@ export default function App() {
               <Route path="/profil" element={<ProfilPage />} />
 
               <Route element={<ProtectedRoute roles={["ADMIN", "SUPERADMIN"]} />}>
+                <Route path="/import" element={<ImportPage />} />
                 <Route path="/users" element={<UsersPage />} />
               </Route>
             </Route>

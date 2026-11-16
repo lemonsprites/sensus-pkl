@@ -1,4 +1,4 @@
-import { LogOut, ShieldCheck, UserRound, Users } from "lucide-react";
+import { FileSpreadsheet, LogOut, ShieldCheck, UserRound, Users } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/auth/auth-context";
@@ -48,17 +48,30 @@ export function AppLayout() {
               <UserRound className="size-4" /> Profil
             </NavLink>
             {isAdmin && (
-              <NavLink
-                to="/users"
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                    isActive && "bg-muted font-medium",
-                  )
-                }
-              >
-                <Users className="size-4" /> Manajemen User
-              </NavLink>
+              <>
+                <NavLink
+                  to="/import"
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                      isActive && "bg-muted font-medium",
+                    )
+                  }
+                >
+                  <FileSpreadsheet className="size-4" /> Import SIMAN
+                </NavLink>
+                <NavLink
+                  to="/users"
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                      isActive && "bg-muted font-medium",
+                    )
+                  }
+                >
+                  <Users className="size-4" /> Manajemen User
+                </NavLink>
+              </>
             )}
           </nav>
 
