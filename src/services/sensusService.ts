@@ -302,3 +302,69 @@ export async function upsertSensus(actorId: string, barangLamaId: string, input:
 
   return { sensus: result, asset: { id: asset.id, nama: asset.nama } };
 }
+
+/** Verifikasi admin: DOCS_COMPLETE → VALIDATED; TIDAK_DITEMUKAN tetap (bypass label). */
+export async function verifySensus(actorId: string, barangLamaId: string) {
+  const existing = await prisma.sensus.findUnique({
+    where: { barangLamaId },
+    select: { id: true, status: true, docsComplete: true },
+  });
+  if (!existing) throw ApiError.notFound("Sensus tidak ditemukan");
+
+  if (existing.status !== "DOCS_COMPLETE" && existing.status !== "TIDAK_DITEMUKAN") {
+    throw ApiError.conflict(
+      "Hanya sensus DOCS_COMPLETE atau TIDAK_DITEMUKAN yang bisa diverifikasi",
+    );
+  }
+
+  const updated = await prisma.sensus.update({
+    where: { barangLamaId },
+    data: {
+      ...(existing.status === "DOCS_COMPLETE"
+        ? { status: "VALIDATED" as const, docsComplete: true }
+        : {}),
+      diverifikasiOlehId: actorId,
+      diverifikasiAt: new Date(),
+    },
+    select: SENSUS_SELECT,
+  });
+
+  return { sensus: updated };
+}
+
+/** Tolak verifikasi → kembali ASSESSED + EditHistory alasan. */
+export async function rejectSensus(actorId: string, barangLamaId: string, catatan: string) {
+  const existing = await prisma.sensus.findUnique({
+    where: { barangLamaId },
+    select: { id: true, status: true },
+  });
+  if (!existing) throw ApiError.notFound("Sensus tidak ditemukan");
+  if (!["VALIDATED", "DOCS_COMPLETE", "TIDAK_DITEMUKAN"].includes(existing.status)) {
+    throw ApiError.conflict("Sensus belum siap diverifikasi/ditolak");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.sensus.update({
+      where: { barangLamaId },
+      data: {
+        status: "ASSESSED",
+        docsComplete: false,
+        diverifikasiOlehId: null,
+        diverifikasiAt: null,
+      },
+      select: SENSUS_SELECT,
+    });
+    await tx.editHistory.create({
+      data: {
+        sensusId: existing.id,
+        olehId: actorId,
+        field: "verifikasi",
+        nilaiLama: existing.status,
+        nilaiBaru: `DITOLAK: ${catatan}`,
+      },
+    });
+    return result;
+  });
+
+  return { sensus: updated };
+}

@@ -49,6 +49,12 @@ enum Kondisi {
   RUSAK_BERAT
 }
 
+/// Jenis dokumen pendukung sensus.
+enum JenisDokumen {
+  FOTO
+  DOKUMEN
+}
+
 /// TODO(v1 §5): konfirmasi nilai statusMatch.
 enum StatusMatch {
   COCOK
@@ -75,6 +81,7 @@ model User {
   sensusDiinput     Sensus[]      @relation("SensusDiinput")
   sensusDiverifikasi Sensus[]     @relation("SensusDiverifikasi")
   editHistory       EditHistory[]
+  dokumenUpload     SensusDokumen[] @relation("DokumenUpload")
 
   @@index([role, isActive])
 }
@@ -174,6 +181,8 @@ model Sensus {
   docsComplete Boolean      @default(false)
   /// Wajib untuk TIDAK_DITEMUKAN.
   docsNote     String?
+  /// M8: kapan label dicetak vs ditempel.
+  labelPrintedAt DateTime?
   labelAppliedAt DateTime?
   catatan      String?
 
@@ -184,6 +193,7 @@ model Sensus {
   diverifikasiAt     DateTime?
 
   editHistory EditHistory[]
+  dokumen     SensusDokumen[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -228,4 +238,22 @@ model ImportBatch {
   createdAt   DateTime  @default(now())
 
   @@index([status, createdAt])
+}
+
+/// Dokumen pendukung per sensus (foto & dokumen).
+model SensusDokumen {
+  id           String       @id @default(uuid())
+  sensusId     String
+  sensus       Sensus       @relation(fields: [sensusId], references: [id], onDelete: Cascade)
+  jenis        JenisDokumen @default(FOTO)
+  bucket       String
+  objectKey    String       @unique
+  thumbKey     String?
+  contentType  String?
+  size         Int?
+  uploadedById String
+  uploadedBy   User         @relation("DokumenUpload", fields: [uploadedById], references: [id])
+  createdAt    DateTime     @default(now())
+
+  @@index([sensusId, jenis])
 }

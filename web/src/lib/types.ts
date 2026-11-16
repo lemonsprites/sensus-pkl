@@ -196,3 +196,20 @@ export interface RuangAssetsResponse {
   page: number;
   limit: number;
 }
+
+export interface DokumenItem {
+  id: string;
+  jenis: "FOTO" | "DOKUMEN";
+  contentType: string | null;
+  size: number | null;
+  createdAt: string;
+  uploadedBy: { id: string; nama: string };
+  url: string;
+  thumbUrl: string | null;
+}
+
+export interface DokumenListResponse {
+  sensusStatus: SensusStatus;
+  docsComplete: boolean;
+  items: DokumenItem[];
+}

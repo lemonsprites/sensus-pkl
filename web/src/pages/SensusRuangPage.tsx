@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, Building2, Loader2, Pencil, Save, Search } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Paperclip, Pencil, Save, Search, Trash2, Upload } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -26,9 +26,12 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader } from "@/components/Loader";
+import { useAuth } from "@/auth/auth-context";
 import { api } from "@/lib/api";
 import type {
   AssetWithSensus,
+  DokumenItem,
+  DokumenListResponse,
   Kondisi,
   RuangAssetsResponse,
   Sensus,
@@ -70,11 +73,15 @@ function SensusBadge({ sensus }: { sensus: Sensus | null }) {
 
 function SensusForm({
   asset,
+  canVerify,
   onSaved,
+  onOpenDocs,
   onClose,
 }: {
   asset: AssetWithSensus;
+  canVerify: boolean;
   onSaved: (assetId: string, sensus: Sensus) => void;
+  onOpenDocs: () => void;
   onClose: () => void;
 }) {
   const existing = asset.sensus;
@@ -119,6 +126,37 @@ function SensusForm({
       onSaved(asset.id, result.sensus);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal menyimpan sensus");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const result = await api<{ sensus: Sensus }>(`/sensus/${asset.id}/verify`, { method: "POST" });
+      onSaved(asset.id, result.sensus);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal verifikasi");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReject = async () => {
+    const note = window.prompt("Alasan penolakan?");
+    if (!note || note.trim() === "") return;
+    setError("");
+    setSaving(true);
+    try {
+      const result = await api<{ sensus: Sensus }>(`/sensus/${asset.id}/reject`, {
+        method: "POST",
+        body: { catatan: note.trim() },
+      });
+      onSaved(asset.id, result.sensus);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal menolak");
     } finally {
       setSaving(false);
     }
@@ -247,6 +285,25 @@ function SensusForm({
           >
             Tidak Ditemukan
           </Button>
+          {existing && (
+            <Button variant="secondary" onClick={onOpenDocs} disabled={saving}>
+              <Paperclip /> Dokumen
+            </Button>
+          )}
+          {canVerify &&
+            existing &&
+            (existing.status === "DOCS_COMPLETE" || existing.status === "TIDAK_DITEMUKAN") && (
+              <Button onClick={() => void handleVerify()} disabled={saving}>
+                Verifikasi
+              </Button>
+            )}
+          {canVerify &&
+            existing &&
+            ["VALIDATED", "DOCS_COMPLETE", "TIDAK_DITEMUKAN"].includes(existing.status) && (
+              <Button variant="outline" onClick={() => void handleReject()} disabled={saving}>
+                Tolak
+              </Button>
+            )}
         </div>
       </CardContent>
     </Card>
@@ -255,6 +312,8 @@ function SensusForm({
 
 export default function SensusRuangPage() {
   const { ruangId } = useParams<{ ruangId: string }>();
+  const { user } = useAuth();
+  const canVerify = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
   const [data, setData] = useState<RuangAssetsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -263,6 +322,13 @@ export default function SensusRuangPage() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"SEMUA" | "BELUM" | "SUDAH">("SEMUA");
   const [selected, setSelected] = useState<AssetWithSensus | null>(null);
+  const [docsAsset, setDocsAsset] = useState<AssetWithSensus | null>(null);
+  const [docs, setDocs] = useState<DokumenListResponse | null>(null);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState("");
+  const [uploadJenis, setUploadJenis] = useState<"FOTO" | "DOKUMEN">("FOTO");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
     if (!ruangId) return;
@@ -299,6 +365,81 @@ export default function SensusRuangPage() {
       };
     });
     setSelected((current) => (current && current.id === assetId ? { ...current, sensus } : current));
+    setDocsAsset((current) => (current && current.id === assetId ? { ...current, sensus } : current));
+  };
+
+  const loadDocs = async (assetId: string) => {
+    setDocsLoading(true);
+    setDocsError("");
+    try {
+      setDocs(await api<DokumenListResponse>(`/sensus/${assetId}/dokumen`));
+    } catch (cause) {
+      setDocs(null);
+      setDocsError(cause instanceof Error ? cause.message : "Gagal memuat dokumen");
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  const openDocs = (asset: AssetWithSensus) => {
+    if (!asset.sensus) {
+      setError("Simpan hasil sensus dulu sebelum upload dokumen pendukung.");
+      return;
+    }
+    setDocsAsset(asset);
+    setDocs(null);
+    setUploadFile(null);
+    void loadDocs(asset.id);
+  };
+
+  const handleUploadDoc = async () => {
+    if (!docsAsset || !uploadFile) return;
+    setUploading(true);
+    setDocsError("");
+    try {
+      const contentType = uploadFile.type || "application/octet-stream";
+      const presign = await api<{
+        uploadUrl: string;
+        objectKey: string;
+        jenis: "FOTO" | "DOKUMEN";
+      }>(`/sensus/${docsAsset.id}/dokumen/presign`, {
+        method: "POST",
+        body: { filename: uploadFile.name, contentType, jenis: uploadJenis },
+      });
+
+      const put = await fetch(presign.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: uploadFile,
+      });
+      if (!put.ok) throw new Error(`Upload langsung ke MinIO gagal (HTTP ${put.status})`);
+
+      await api(`/sensus/${docsAsset.id}/dokumen/confirm`, {
+        method: "POST",
+        body: { objectKey: presign.objectKey, jenis: uploadJenis, contentType, size: uploadFile.size },
+      });
+
+      setUploadFile(null);
+      await loadDocs(docsAsset.id);
+      await load();
+    } catch (cause) {
+      setDocsError(cause instanceof Error ? cause.message : "Gagal upload dokumen");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteDoc = async (dokumen: DokumenItem) => {
+    if (!docsAsset) return;
+    if (!window.confirm(`Hapus dokumen ${dokumen.jenis}?`)) return;
+    setDocsError("");
+    try {
+      await api(`/sensus/${docsAsset.id}/dokumen/${dokumen.id}`, { method: "DELETE" });
+      await loadDocs(docsAsset.id);
+      await load();
+    } catch (cause) {
+      setDocsError(cause instanceof Error ? cause.message : "Gagal menghapus dokumen");
+    }
   };
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
@@ -367,9 +508,114 @@ export default function SensusRuangPage() {
         <SensusForm
           key={selected.id}
           asset={selected}
+          canVerify={canVerify}
           onSaved={handleSaved}
+          onOpenDocs={() => openDocs(selected)}
           onClose={() => setSelected(null)}
         />
+      )}
+
+      {docsAsset && (
+        <Card className="border-primary/40">
+          <CardHeader className="flex-row items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Dokumen: {docsAsset.nama}</CardTitle>
+              <CardDescription>
+                Upload langsung ke MinIO via presigned PUT. Minimal 1 foto untuk DOCS_COMPLETE.
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setDocsAsset(null)}>
+              Tutup
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {docsError && (
+              <Alert variant="destructive">
+                <AlertDescription>{docsError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1 space-y-2">
+                <Label htmlFor="dokumen-file">File (foto/PDF, maks 15 MB)</Label>
+                <Input
+                  id="dokumen-file"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dokumen-jenis">Jenis</Label>
+                <Select
+                  id="dokumen-jenis"
+                  value={uploadJenis}
+                  onChange={(event) => setUploadJenis(event.target.value as "FOTO" | "DOKUMEN")}
+                >
+                  <option value="FOTO">Foto</option>
+                  <option value="DOKUMEN">Dokumen pendukung</option>
+                </Select>
+              </div>
+              <Button onClick={() => void handleUploadDoc()} disabled={!uploadFile || uploading}>
+                {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
+                Upload
+              </Button>
+            </div>
+
+            {docs && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <Badge variant={docs.docsComplete ? "default" : "outline"}>
+                  {docs.docsComplete ? "Dokumen lengkap" : "Belum lengkap"}
+                </Badge>
+                <span className="text-muted-foreground">{docs.items.length} file</span>
+              </div>
+            )}
+
+            {docsLoading ? (
+              <Loader label="Memuat dokumen…" />
+            ) : docs && docs.items.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {docs.items.map((dokumen) => (
+                  <div key={dokumen.id} className="rounded-lg border p-3">
+                    {dokumen.jenis === "FOTO" ? (
+                      <a href={dokumen.url} target="_blank" rel="noreferrer">
+                        <img
+                          src={dokumen.thumbUrl ?? dokumen.url}
+                          alt="Foto sensus"
+                          className="h-36 w-full rounded-md object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <a
+                        href={dokumen.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-36 items-center justify-center rounded-md bg-muted text-sm underline"
+                      >
+                        Buka dokumen
+                      </a>
+                    )}
+                    <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">
+                        {dokumen.jenis} · {dokumen.uploadedBy.nama}
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => void handleDeleteDoc(dokumen)}
+                        aria-label="Hapus dokumen"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Belum ada dokumen.</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <Card>
@@ -469,14 +715,26 @@ export default function SensusRuangPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelected(asset)}
-                          aria-label={`Isi sensus ${asset.nama}`}
-                        >
-                          <Pencil /> {asset.sensus ? "Edit" : "Isi"}
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openDocs(asset)}
+                            disabled={!asset.sensus}
+                            title="Dokumen pendukung"
+                            aria-label={`Dokumen ${asset.nama}`}
+                          >
+                            <Paperclip />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelected(asset)}
+                            aria-label={`Isi sensus ${asset.nama}`}
+                          >
+                            <Pencil /> {asset.sensus ? "Edit" : "Isi"}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

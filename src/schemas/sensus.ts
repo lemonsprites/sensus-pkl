@@ -31,3 +31,9 @@ export type RuangParam = z.infer<typeof ruangParamSchema>;
 export type SensusParam = z.infer<typeof sensusParamSchema>;
 export type RoomAssetsQuery = z.infer<typeof roomAssetsQuerySchema>;
 export type SensusUpsertInput = z.infer<typeof sensusUpsertSchema>;
+
+export const rejectSensusSchema = z.object({
+  catatan: z.string().trim().min(1, "Alasan penolakan wajib diisi").max(1000),
+});
+
+export type RejectSensusInput = z.infer<typeof rejectSensusSchema>;
