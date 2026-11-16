@@ -8,9 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { api, apiDownload } from "@/lib/api";
-import type { HierarkiResponse, ReportData } from "@/lib/types";
+import type { HierarkiResponse, ReportData, SensusStatus } from "@/lib/types";
 
 const KONDISI_LABEL = { BAIK: "Baik", RUSAK_RINGAN: "Rusak ringan", RUSAK_BERAT: "Rusak berat" };
+const STATUS_LABEL: Record<SensusStatus, string> = {
+  DRAFT: "Draft",
+  ASSESSED: "Diperiksa",
+  DOCS_COMPLETE: "Dokumen lengkap",
+  VALIDATED: "Tervalidasi",
+  TIDAK_DITEMUKAN: "Tidak ditemukan",
+};
 
 function dateStart(value: string): string | undefined {
   return value ? new Date(`${value}T00:00:00`).toISOString() : undefined;
@@ -247,7 +254,7 @@ export default function ReportPage() {
               <table className="w-full border-collapse text-xs">
                 <thead><tr className="bg-muted">{["Gedung / Ruang", "Barang", "Kondisi", "Jumlah", "Status", "Catatan"].map((h) => <th key={h} className="border p-1 text-left">{h}</th>)}</tr></thead>
                 <tbody>{report.findings.map((row) => (
-                  <tr key={`${row.grupId}-${row.kodeBarang}`}><td className="border p-1">{row.gedung} / {row.ruang}</td><td className="border p-1">{row.namaBarang}</td><td className="border p-1">{KONDISI_LABEL[row.kondisi]}</td><td className="border p-1 text-center">{row.jumlah}</td><td className="border p-1">{row.status}</td><td className="border p-1">{row.catatan ?? "—"}</td></tr>
+                  <tr key={`${row.grupId}-${row.kodeBarang}`}><td className="border p-1">{row.gedung} / {row.ruang}</td><td className="border p-1">{row.namaBarang}</td><td className="border p-1">{KONDISI_LABEL[row.kondisi]}</td><td className="border p-1 text-center">{row.jumlah}</td><td className="border p-1">{STATUS_LABEL[row.status]}</td><td className="border p-1">{row.catatan ?? "—"}</td></tr>
                 ))}</tbody>
               </table>
             </div>

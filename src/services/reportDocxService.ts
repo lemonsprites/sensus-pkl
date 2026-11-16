@@ -18,6 +18,13 @@ import type { ReportData } from "./reportService.js";
 
 const FONT = "Times New Roman";
 const SIZE = 24;
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  ASSESSED: "Diperiksa",
+  DOCS_COMPLETE: "Dokumen lengkap",
+  VALIDATED: "Tervalidasi",
+  TIDAK_DITEMUKAN: "Tidak ditemukan",
+};
 
 function text(value: string | null | undefined, bold = false, size = SIZE): TextRun {
   return new TextRun({ text: value ?? "-", bold, font: FONT, size });
@@ -185,7 +192,7 @@ export async function buildReportDocx(data: ReportData): Promise<Buffer> {
           row.namaBarang,
           row.kondisi,
           String(row.jumlah),
-          row.status,
+          STATUS_LABEL[row.status] ?? row.status,
           row.catatan ?? "-",
         ]),
       ),
