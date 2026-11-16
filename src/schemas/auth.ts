@@ -19,14 +19,29 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password wajib diisi"),
 });
 
+export const profileFieldsSchema = z.object({
+  nim: z.string().trim().max(40).optional(),
+  programStudi: z.string().trim().max(120).optional(),
+  instansi: z.string().trim().max(160).optional(),
+  noHp: z.string().trim().max(32).optional(),
+});
+
 export const updateMeSchema = z
   .object({
     nama: z.string().trim().min(1, "Nama wajib diisi").max(120).optional(),
     email: emailSchema.optional(),
+    ...profileFieldsSchema.shape,
   })
-  .refine((data) => data.nama !== undefined || data.email !== undefined, {
-    message: "Tidak ada perubahan yang dikirim",
-  });
+  .refine(
+    (data) =>
+      data.nama !== undefined ||
+      data.email !== undefined ||
+      data.nim !== undefined ||
+      data.programStudi !== undefined ||
+      data.instansi !== undefined ||
+      data.noHp !== undefined,
+    { message: "Tidak ada perubahan yang dikirim" },
+  );
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Password lama wajib diisi"),

@@ -28,6 +28,10 @@ export default function ProfilPage() {
 
   const [nama, setNama] = useState(user?.nama ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [nim, setNim] = useState(user?.nim ?? "");
+  const [programStudi, setProgramStudi] = useState(user?.programStudi ?? "");
+  const [instansi, setInstansi] = useState(user?.instansi ?? "");
+  const [noHp, setNoHp] = useState(user?.noHp ?? "");
   const [savingProfil, setSavingProfil] = useState(false);
   const [profilNotice, setProfilNotice] = useState("");
   const [profilError, setProfilError] = useState("");
@@ -41,7 +45,13 @@ export default function ProfilPage() {
 
   if (!user) return null;
 
-  const profilDirty = nama.trim() !== user.nama || email.trim() !== user.email;
+  const profilDirty =
+    nama.trim() !== user.nama ||
+    email.trim() !== user.email ||
+    nim.trim() !== (user.nim ?? "") ||
+    programStudi.trim() !== (user.programStudi ?? "") ||
+    instansi.trim() !== (user.instansi ?? "") ||
+    noHp.trim() !== (user.noHp ?? "");
 
   const handleSaveProfil = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -51,10 +61,18 @@ export default function ProfilPage() {
     try {
       const updated = await api<User>("/me", {
         method: "PATCH",
-        body: { nama: nama.trim(), email: email.trim() },
+        body: {
+          nama: nama.trim(), email: email.trim(),
+          nim: nim.trim(), programStudi: programStudi.trim(),
+          instansi: instansi.trim(), noHp: noHp.trim(),
+        },
       });
       setNama(updated.nama);
       setEmail(updated.email);
+      setNim(updated.nim ?? "");
+      setProgramStudi(updated.programStudi ?? "");
+      setInstansi(updated.instansi ?? "");
+      setNoHp(updated.noHp ?? "");
       await refresh();
       setProfilNotice("Profil disimpan.");
     } catch (cause) {
@@ -146,6 +164,22 @@ export default function ProfilPage() {
                   onChange={(event) => setEmail(event.target.value)}
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nim">NIM</Label>
+                <Input id="nim" value={nim} onChange={(event) => setNim(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="programStudi">Program studi</Label>
+                <Input id="programStudi" value={programStudi} onChange={(event) => setProgramStudi(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="instansi">Instansi / kampus</Label>
+                <Input id="instansi" value={instansi} onChange={(event) => setInstansi(event.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="noHp">No. HP</Label>
+                <Input id="noHp" value={noHp} onChange={(event) => setNoHp(event.target.value)} />
               </div>
             </div>
 

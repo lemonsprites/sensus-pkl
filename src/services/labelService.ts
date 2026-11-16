@@ -1,5 +1,6 @@
 import { config } from "../lib/config.js";
 import { prisma } from "../lib/prisma.js";
+import { logActivity } from "./activityService.js";
 import type { LabelQuery } from "../schemas/label.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -115,7 +116,7 @@ export async function getEligible(query: LabelQuery) {
   };
 }
 
-export async function printLabels(ids: string[]) {
+export async function printLabels(actorId: string, ids: string[]) {
   const rows = (await prisma.sensus.findMany({
     where: { id: { in: ids }, status: "VALIDATED", labelPrintedAt: null },
     select: LABEL_SELECT,
@@ -126,16 +127,30 @@ export async function printLabels(ids: string[]) {
 
   await prisma.sensus.updateMany({
     where: { id: { in: valid.map((row) => row.id) } },
-    data: { labelPrintedAt: new Date() },
+    data: { labelPrintedAt: new Date(), labelPrintedById: actorId },
   });
 
+  await logActivity({
+    actorId,
+    action: "LABEL_PRINT",
+    entityType: "LABEL",
+    summary: `Cetak ${valid.length} label aset`,
+    metadata: { sensusIds: valid.map((row) => row.id) },
+  });
   return { printed: valid.length, labels: valid.map(toLabel) };
 }
 
-export async function applyLabels(ids: string[]) {
+export async function applyLabels(actorId: string, ids: string[]) {
   const result = await prisma.sensus.updateMany({
     where: { id: { in: ids }, labelPrintedAt: { not: null }, labelAppliedAt: null },
-    data: { labelAppliedAt: new Date() },
+    data: { labelAppliedAt: new Date(), labelAppliedById: actorId },
+  });
+  await logActivity({
+    actorId,
+    action: "LABEL_APPLY",
+    entityType: "LABEL",
+    summary: `Tandai ${result.count} label sudah ditempel`,
+    metadata: { sensusIds: ids },
   });
   return { applied: result.count };
 }

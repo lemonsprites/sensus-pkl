@@ -1,4 +1,7 @@
-import { Building2, FileSpreadsheet, LayoutDashboard, LogOut, Printer, ScanLine, ShieldCheck, UserRound, Users } from "lucide-react";
+import {
+  Activity, Building2, CheckCheck, FileSpreadsheet, FileText, History, LayoutDashboard,
+  LogOut, Printer, ScanLine, ShieldCheck, UserRound, Users,
+} from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/auth/auth-context";
@@ -61,6 +64,28 @@ export function AppLayout() {
               </NavLink>
             )}
             <NavLink
+              to="/monitoring"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                  isActive && "bg-muted font-medium",
+                )
+              }
+            >
+              <Activity className="size-4" /> Monitoring
+            </NavLink>
+            <NavLink
+              to="/log"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                  isActive && "bg-muted font-medium",
+                )
+              }
+            >
+              <History className="size-4" /> Log
+            </NavLink>
+            <NavLink
               to="/profil"
               className={({ isActive }) =>
                 cn(
@@ -94,6 +119,28 @@ export function AppLayout() {
                   }
                 >
                   <Printer className="size-4" /> Label
+                </NavLink>
+                <NavLink
+                  to="/admin/validasi"
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                      isActive && "bg-muted font-medium",
+                    )
+                  }
+                >
+                  <CheckCheck className="size-4" /> Validasi
+                </NavLink>
+                <NavLink
+                  to="/laporan"
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                      isActive && "bg-muted font-medium",
+                    )
+                  }
+                >
+                  <FileText className="size-4" /> Laporan
                 </NavLink>
                 <NavLink
                   to="/users"

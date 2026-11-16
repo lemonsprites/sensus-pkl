@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { BUCKETS, minio, minioPresign } from "../lib/minio.js";
 import { logger } from "../lib/logger.js";
 import { prisma } from "../lib/prisma.js";
+import { logActivity } from "./activityService.js";
 import type { DokumenConfirmInput, DokumenPresignInput } from "../schemas/dokumen.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -39,7 +40,7 @@ function validateContent(jenis: Jenis, contentType: string): void {
 async function getGrup(grupId: string) {
   const group = await prisma.sensusGrup.findUnique({
     where: { id: grupId },
-    select: { id: true, status: true, docsComplete: true },
+    select: { id: true, status: true, docsComplete: true, kodeBarang: true, namaBarang: true, jumlah: true },
   });
   if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
   return group;
@@ -209,6 +210,14 @@ export async function confirmUpload(actorId: string, grupId: string, input: Doku
 
   await syncDocsComplete(group.id);
   const updated = await getGrup(group.id);
+  await logActivity({
+    actorId,
+    action: "DOC_UPLOAD",
+    entityType: "SENSUS_GRUP",
+    entityId: group.id,
+    summary: `Unggah ${input.jenis} ${group.namaBarang} (${group.kodeBarang})`,
+    metadata: { dokumenId: created.id, objectKey: created.objectKey, jenis: created.jenis },
+  });
   return { dokumen: await serialize(created), sensusStatus: updated.status };
 }
 
@@ -227,13 +236,20 @@ export async function listDokumen(grupId: string) {
   return { sensusStatus: group.status, docsComplete: group.docsComplete, items };
 }
 
-export async function deleteDokumen(grupId: string, dokumenId: string) {
+export async function deleteDokumen(
+  actor: { id: string; role: string },
+  grupId: string,
+  dokumenId: string,
+) {
   const group = await getGrup(grupId);
   const doc = await prisma.sensusDokumen.findFirst({
     where: { id: dokumenId, grupId },
-    select: { id: true, bucket: true, objectKey: true, thumbKey: true },
+    select: { id: true, bucket: true, objectKey: true, thumbKey: true, uploadedById: true },
   });
   if (!doc) throw ApiError.notFound("Dokumen tidak ditemukan");
+  if (actor.role !== "ADMIN" && actor.role !== "SUPERADMIN" && doc.uploadedById !== actor.id) {
+    throw ApiError.forbidden("Hanya pengunggah atau ADMIN yang boleh menghapus dokumen");
+  }
   await Promise.allSettled([
     minio.removeObject(doc.bucket, doc.objectKey),
     doc.thumbKey ? minio.removeObject(BUCKETS.thumb, doc.thumbKey) : Promise.resolve(),
@@ -241,5 +257,13 @@ export async function deleteDokumen(grupId: string, dokumenId: string) {
   await prisma.sensusDokumen.delete({ where: { id: doc.id } });
   await syncDocsComplete(group.id);
   const updated = await getGrup(group.id);
+  await logActivity({
+    actorId: actor.id,
+    action: "DOC_DELETE",
+    entityType: "SENSUS_GRUP",
+    entityId: group.id,
+    summary: `Hapus dokumen ${group.namaBarang} (${group.kodeBarang})`,
+    metadata: { dokumenId: doc.id, objectKey: doc.objectKey },
+  });
   return { sensusStatus: updated.status, docsComplete: updated.docsComplete };
 }

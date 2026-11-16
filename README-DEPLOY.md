@@ -102,7 +102,43 @@ Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Semua ruang dibuat **ko
 8. **Label**: gate ketat NUP valid + unik per kode barang + aktif + satker cocok + VALIDATED + bukan temuan baru. QR = Kode Register SIMAN.
 9. **Scan**: masukkan Kode Register untuk verifikasi aset/ruang/status/gate.
 
-## 8. Health & smoke test
+## 8. Monitoring, kolaborasi, validasi & laporan
+
+### Monitoring progres PKL
+- Menu **Monitoring** (`/monitoring`) tersedia untuk semua role: ringkasan grup/NUP/dokumen/validasi, tabel progres per mahasiswa, dan tabel progres per ruang.
+- Metrik per user dihitung dari data aktual: grup dibuat, NUP dialokasikan, dokumen diunggah, koreksi (`updatedBy`), grup tervalidasi, jumlah ruang, dan aktivitas terakhir.
+- Identitas PKL ada di profil user: **NIM, program studi, instansi/kampus, no. HP**. ADMIN/SUPERADMIN dapat mengisinya lewat Manajemen User; mahasiswa dapat melengkapinya di Profil.
+
+### Log aktivitas & kolaborasi
+- Menu **Log** (`/log`) menampilkan audit trail: waktu, aktor, aksi, entitas, ringkasan, dan metadata nilai lama/baru.
+- Semua user login dapat **melihat** log.
+- Semua user login boleh **mengoreksi kondisi/catatan** grup berstatus `ASSESSED`/`DOCS_COMPLETE`; koreksi mencatat `SensusGrup.updatedById` + `ActivityLog` (`GROUP_UPDATE`).
+- **Hapus grup** hanya oleh pembuat grup atau ADMIN/SUPERADMIN, dan tidak boleh grup `VALIDATED`/sudah label.
+- **Validasi/tolak** hanya ADMIN/SUPERADMIN.
+- Aktivitas yang tercatat: login/logout, buat/koreksi/hapus grup, upload/hapus dokumen, validasi/tolak, cetak/tempel label, import SIMAN, dan manajemen user.
+
+### Validasi admin
+- Menu **Validasi** (`/admin/validasi`) berisi antrean grup dengan filter status, ruang, pencarian, dan periode.
+- Detail grup menampilkan NUP, dokumen (presigned URL), dan riwayat aktivitas.
+- Aksi: validasi, tolak dengan alasan, serta **validasi massal** untuk grup `DOCS_COMPLETE` terpilih.
+
+### Laporan resmi
+- Menu **Laporan** (`/laporan`) untuk ADMIN/SUPERADMIN.
+- Konfigurasi: periode, gedung/ruang, identitas sekolah, kota, dan penandatangan (Kepala Madrasah, Admin BMN, Dosen Pembimbing).
+- Halaman siap **cetak/PDF A4** (cover, lembar pengesahan, ringkasan eksekutif, rekap gedung/ruang, temuan, kontribusi mahasiswa, log, kesimpulan).
+- Tombol **Export DOCX** menghasilkan file Word resmi yang dapat diedit. Endpoint: `GET /api/report/export`.
+
+### Endpoint baru
+```text
+GET  /api/logs
+GET  /api/monitoring/progress
+GET  /api/admin/grup
+POST /api/admin/grup/bulk-verify
+GET  /api/report/summary
+GET  /api/report/export
+```
+
+## 9. Health & smoke test
 
 ```bash
 curl -s https://<domain>/api/health
@@ -112,12 +148,12 @@ npm run smoke
 # butuh SEED_SUPERADMIN_EMAIL/PASSWORD di .env; opsional SMOKE_KODE_REGISTER
 ```
 
-## 9. Catatan operasional
+## 10. Catatan operasional
 
 - `app.set("trust proxy", 1)` dan `listen(port, "0.0.0.0")` wajib di platform.
 - SPA fallback memakai regex; `/api/*` yang tidak ada mengembalikan JSON 404.
 - Redis key WAJIB lewat registry `K.*`; rate-limit memakai prefix eksplisit.
 - Presigned PUT/GET memakai `MINIO_PUBLIC_ENDPOINT`; server-side memakai endpoint internal.
-- Migrasi: `npm run prisma:deploy` saat deploy; jangan `db push` di produksi.
+- Migrasi: `npm run prisma:deploy` saat deploy; jangan `db push` di produksi. Migration `20261116180000_activity_profile` menambah `ActivityLog`, profil PKL, aktor koreksi grup, dan aktor label (nullable/non-destruktif).
 - Backup: DB Postgres + bucket MinIO. Staging import bersifat sementara (2 jam/7 hari).
 - Asumsi saat brief v1 belum lengkap: 1 foto minimum untuk DOCS_COMPLETE, JWT tanpa refresh token, logout mereset semua sesi, reset password mengembalikan password sementara 16 karakter.

@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ArrowLeft, CheckCircle2, Loader2, Paperclip, Plus, Save,
+  ArrowLeft, CheckCircle2, Loader2, Paperclip, Pencil, Plus, Save,
   Search, Trash2, Upload, XCircle,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { useAuth } from "@/auth/auth-context";
+import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import {
-  Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
@@ -70,6 +74,13 @@ export default function SensusRuangPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editGroup, setEditGroup] = useState<SensusGrup | null>(null);
+  const [editKondisi, setEditKondisi] = useState<Kondisi>("BAIK");
+  const [editCatatan, setEditCatatan] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [groupSearch, setGroupSearch] = useState("");
 
   const [docsGroup, setDocsGroup] = useState<SensusGrup | null>(null);
   const [docs, setDocs] = useState<DokumenListResponse | null>(null);
@@ -137,12 +148,40 @@ export default function SensusRuangPage() {
       await api(`/ruang/${ruangId}/sensus-grup`, { method: "POST", body: { rows: payload } });
       setNotice(`${payload.length} baris input dialokasikan ke NUP.`);
       setRows([newRow()]);
+      setFormOpen(false);
       await load();
       await loadKandidat(kandidatQuery);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal alokasi NUP");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openEdit = (group: SensusGrup) => {
+    setEditGroup(group);
+    setEditKondisi(group.kondisi);
+    setEditCatatan(group.catatan ?? "");
+    setError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editGroup) return;
+    setSavingEdit(true);
+    setError("");
+    setNotice("");
+    try {
+      await api(`/sensus-grup/${editGroup.id}`, {
+        method: "PATCH",
+        body: { kondisi: editKondisi, catatan: editCatatan },
+      });
+      setNotice(`Koreksi ${editGroup.namaBarang} tersimpan dan tercatat di log.`);
+      setEditGroup(null);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Gagal menyimpan koreksi");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -237,6 +276,78 @@ export default function SensusRuangPage() {
     }
   };
 
+  const groupColumns: DataTableColumn<SensusGrup>[] = [
+    {
+      key: "aset",
+      header: "Aset",
+      sortValue: (group) => group.namaBarang,
+      cell: (group) => (
+        <div className="max-w-64">
+          <div className="truncate font-medium">{group.namaBarang}</div>
+          <div className="font-mono text-xs text-muted-foreground">{group.kodeBarang}</div>
+        </div>
+      ),
+    },
+    {
+      key: "kondisi",
+      header: "Kondisi / jumlah",
+      sortValue: (group) => group.jumlah,
+      cell: (group) => <span className="text-xs">{KONDISI_LABEL[group.kondisi]} · {group.jumlah} unit</span>,
+    },
+    {
+      key: "nup",
+      header: "NUP",
+      sortValue: (group) => nupRange(group),
+      cell: (group) => <span className="font-mono text-xs">{nupRange(group)}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortValue: (group) => group.status,
+      cell: (group) => <StatusBadge status={group.status} />,
+    },
+    {
+      key: "catatan",
+      header: "Catatan",
+      cell: (group) => (
+        <div className="max-w-52 text-xs text-muted-foreground">
+          <div className="truncate" title={group.catatan ?? ""}>{group.catatan ?? "—"}</div>
+          {group.catatanOtomatis && <div>{group.catatanOtomatis}</div>}
+          {group.updatedBy && <div>Dikoreksi: {group.updatedBy.nama}</div>}
+        </div>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "",
+      cell: (group) => (
+        <div className="flex justify-end gap-1">
+          {(group.status === "ASSESSED" || group.status === "DOCS_COMPLETE") && (
+            <Button size="icon" variant="ghost" title="Koreksi kondisi/catatan" onClick={() => openEdit(group)}><Pencil /></Button>
+          )}
+          <Button size="icon" variant="ghost" title="Dokumen" onClick={() => void loadDocs(group)}><Paperclip /></Button>
+          {canVerify && group.status === "DOCS_COMPLETE" && (
+            <Button size="icon" variant="ghost" title="Validasi" onClick={() => void verifyGroup(group)}><CheckCircle2 /></Button>
+          )}
+          {canVerify && (group.status === "VALIDATED" || group.status === "DOCS_COMPLETE") && (
+            <Button size="icon" variant="ghost" title="Tolak" onClick={() => void rejectGroup(group)}><XCircle /></Button>
+          )}
+          {group.status !== "VALIDATED" && (
+            <Button size="icon" variant="ghost" title="Hapus grup" onClick={() => void deleteGroup(group)}><Trash2 /></Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  const groupRows = (data?.groups ?? []).filter((group) =>
+    !groupSearch
+      ? true
+      : `${group.namaBarang} ${group.kodeBarang} ${group.catatan ?? ""}`
+          .toLowerCase()
+          .includes(groupSearch.toLowerCase()),
+  );
+
   if (!ruangId) return null;
 
   return (
@@ -257,22 +368,26 @@ export default function SensusRuangPage() {
               {data.ruang.lantai > 0 ? ` · Lantai ${data.ruang.lantai}` : ""}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">{data.ruang._count.grup} grup input</Badge>
             <Badge variant="secondary">{data.ruang._count.sensus} NUP disensus</Badge>
+            <Button onClick={() => { setRows([newRow()]); setFormOpen(true); }}>
+              <Plus /> Tambah Sensus
+            </Button>
           </div>
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Tambah hasil sensus</CardTitle>
-          <CardDescription>
-            Pilih jenis aset, kondisi, dan jumlah. Sistem mengambil NUP terakhir yang belum disensus
-            lalu memetakannya ke ruang ini.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Tambah hasil sensus</DialogTitle>
+            <DialogDescription>
+              Pilih jenis aset, kondisi, dan jumlah. Sistem mengambil NUP terakhir yang belum disensus
+              lalu memetakannya ke ruang ini.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-64 flex-1 space-y-2">
               <Label htmlFor="cari-kandidat">Cari kandidat aset</Label>
@@ -335,76 +450,33 @@ export default function SensusRuangPage() {
               Simpan & Alokasikan NUP
             </Button>
           </div>
-        </CardContent>
-      </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader><CardTitle>Riwayat input ruang</CardTitle></CardHeader>
         <CardContent>
-          {loading ? <Loader label="Memuat…" /> : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Aset</TableHead>
-                  <TableHead>Kondisi / jumlah</TableHead>
-                  <TableHead>NUP</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Catatan</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data && data.groups.length > 0 ? (
-                  data.groups.map((group) => (
-                    <TableRow key={group.id}>
-                      <TableCell className="max-w-64">
-                        <div className="truncate font-medium">{group.namaBarang}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{group.kodeBarang}</div>
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        {KONDISI_LABEL[group.kondisi]} · {group.jumlah} unit
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{nupRange(group)}</TableCell>
-                      <TableCell><StatusBadge status={group.status} /></TableCell>
-                      <TableCell className="max-w-52 text-xs text-muted-foreground">
-                        <div className="truncate" title={group.catatan ?? ""}>{group.catatan ?? "—"}</div>
-                        {group.catatanOtomatis && <div>{group.catatanOtomatis}</div>}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" title="Dokumen" onClick={() => void loadDocs(group)}><Paperclip /></Button>
-                          {canVerify && group.status === "DOCS_COMPLETE" && (
-                            <Button size="icon" variant="ghost" title="Validasi" onClick={() => void verifyGroup(group)}><CheckCircle2 /></Button>
-                          )}
-                          {canVerify && (group.status === "VALIDATED" || group.status === "DOCS_COMPLETE") && (
-                            <Button size="icon" variant="ghost" title="Tolak" onClick={() => void rejectGroup(group)}><XCircle /></Button>
-                          )}
-                          {group.status !== "VALIDATED" && (
-                            <Button size="icon" variant="ghost" title="Hapus grup" onClick={() => void deleteGroup(group)}><Trash2 /></Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableEmpty colSpan={6}>Belum ada input. Tambahkan hasil sensus di atas.</TableEmpty>
-                )}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            columns={groupColumns}
+            data={groupRows}
+            getRowId={(group) => group.id}
+            search={groupSearch}
+            onSearchChange={setGroupSearch}
+            searchPlaceholder="Cari barang / kode / catatan…"
+            loading={loading}
+            emptyText="Belum ada input. Tambahkan hasil sensus di atas."
+          />
         </CardContent>
       </Card>
 
-      {docsGroup && (
-        <Card className="border-primary/40">
-          <CardHeader className="flex-row items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">Dokumen: {docsGroup.namaBarang} ({docsGroup.jumlah} unit)</CardTitle>
-              <CardDescription>Foto grup menandai semua NUP dalam grup DOCS_COMPLETE.</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setDocsGroup(null)}>Tutup</Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      <Dialog open={Boolean(docsGroup)} onOpenChange={(open) => !open && setDocsGroup(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Dokumen: {docsGroup?.namaBarang} ({docsGroup?.jumlah} unit)</DialogTitle>
+            <DialogDescription>Foto grup menandai semua NUP dalam grup DOCS_COMPLETE.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
             {docsError && <Alert variant="destructive"><AlertDescription>{docsError}</AlertDescription></Alert>}
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-56 flex-1 space-y-2">
@@ -447,9 +519,43 @@ export default function SensusRuangPage() {
                 ))}
               </div>
             ) : <p className="text-sm text-muted-foreground">Belum ada dokumen.</p>}
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editGroup)} onOpenChange={(open) => !open && setEditGroup(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Koreksi grup sensus</DialogTitle>
+            <DialogDescription>
+              {editGroup ? `${editGroup.namaBarang} (${editGroup.kodeBarang}) · ${editGroup.jumlah} unit` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Kondisi</Label>
+              <Select value={editKondisi} onChange={(event) => setEditKondisi(event.target.value as Kondisi)}>
+                {Object.entries(KONDISI_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-catatan">Catatan</Label>
+              <Input id="edit-catatan" value={editCatatan} onChange={(event) => setEditCatatan(event.target.value)} placeholder="alasan koreksi / kondisi khusus" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Koreksi tercatat di log aktivitas dan mengubah status verifikasi bila diperlukan.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditGroup(null)}>Batal</Button>
+            <Button onClick={() => void saveEdit()} disabled={savingEdit}>
+              {savingEdit ? <Loader2 className="animate-spin" /> : <Save />} Simpan koreksi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader><CardTitle>NUP hasil mapping ruang ini</CardTitle></CardHeader>

@@ -60,6 +60,11 @@ model User {
   isActive     Boolean  @default(true)
   tokenVersion Int      @default(0)
   lastLoginAt  DateTime?
+  /// Identitas PKL untuk monitoring & laporan.
+  nim          String?  @unique
+  programStudi String?
+  instansi     String?
+  noHp         String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -68,6 +73,10 @@ model User {
   editHistory        EditHistory[]
   dokumenUpload      SensusDokumen[] @relation("DokumenUpload")
   sensusGrupDibuat   SensusGrup[]    @relation("GrupDibuat")
+  sensusGrupDiubah   SensusGrup[]    @relation("GrupDiperbarui")
+  activityLogs       ActivityLog[]   @relation("ActivityActor")
+  labelDicetak       Sensus[]        @relation("LabelPrinted")
+  labelDitempel      Sensus[]        @relation("LabelApplied")
 
   @@index([role, isActive])
 }
@@ -151,6 +160,8 @@ model SensusGrup {
   catatanOtomatis String?
   createdById     String
   createdBy       User         @relation("GrupDibuat", fields: [createdById], references: [id])
+  updatedById     String?
+  updatedBy       User?        @relation("GrupDiperbarui", fields: [updatedById], references: [id])
 
   sensus  Sensus[]
   dokumen SensusDokumen[]
@@ -179,7 +190,11 @@ model Sensus {
   docsComplete Boolean      @default(false)
   docsNote     String?
   labelPrintedAt DateTime?
+  labelPrintedById String?
+  labelPrintedBy   User?   @relation("LabelPrinted", fields: [labelPrintedById], references: [id])
   labelAppliedAt DateTime?
+  labelAppliedById String?
+  labelAppliedBy   User?   @relation("LabelApplied", fields: [labelAppliedById], references: [id])
   catatan      String?
 
   diinputOlehId      String
@@ -251,4 +266,24 @@ model SensusDokumen {
 
   @@index([sensusId, jenis])
   @@index([grupId, jenis])
+}
+
+/// Log aktivitas global (kolaborasi & monitoring).
+model ActivityLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  /// Snapshot nama agar log tetap terbaca walau user dinonaktifkan/dihapus.
+  actorNama  String
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }

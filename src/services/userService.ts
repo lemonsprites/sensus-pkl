@@ -7,6 +7,7 @@ import type {
   UpdateUserInput,
 } from "../schemas/user.js";
 import { ApiError } from "../utils/apiError.js";
+import { logActivity } from "./activityService.js";
 import { generateTempPassword, hashPassword, PUBLIC_USER_SELECT } from "./authService.js";
 
 export interface Actor {
@@ -77,6 +78,7 @@ export async function listUsers(actor: Actor, query: ListUsersQuery) {
     where.OR = [
       { nama: { contains: query.q, mode: "insensitive" } },
       { email: { contains: query.q, mode: "insensitive" } },
+      { nim: { contains: query.q, mode: "insensitive" } },
     ];
   }
 
@@ -104,18 +106,35 @@ export async function createUser(actor: Actor, input: CreateUserInput) {
     select: { id: true },
   });
   if (existing) throw ApiError.conflict("Email sudah terdaftar");
+  if (input.nim) {
+    const nimDipakai = await prisma.user.findUnique({ where: { nim: input.nim }, select: { id: true } });
+    if (nimDipakai) throw ApiError.conflict("NIM sudah terdaftar");
+  }
 
   const passwordHash = await hashPassword(input.password);
 
-  return prisma.user.create({
+  const created = await prisma.user.create({
     data: {
       nama: input.nama,
       email: input.email,
       passwordHash,
       role: input.role,
+      nim: input.nim || null,
+      programStudi: input.programStudi || null,
+      instansi: input.instansi || null,
+      noHp: input.noHp || null,
     },
     select: PUBLIC_USER_SELECT,
   });
+  await logActivity({
+    actorId: actor.id,
+    action: "USER_CREATE",
+    entityType: "USER",
+    entityId: created.id,
+    summary: `Buat akun ${created.nama} (${created.role})`,
+    metadata: { email: created.email, role: created.role, nim: created.nim },
+  });
+  return created;
 }
 
 export async function updateUser(actor: Actor, id: string, input: UpdateUserInput) {
@@ -138,16 +157,36 @@ export async function updateUser(actor: Actor, id: string, input: UpdateUserInpu
     });
     if (existing) throw ApiError.conflict("Email sudah terdaftar");
   }
+  if (input.nim !== undefined && input.nim && input.nim !== target.nim) {
+    const nimDipakai = await prisma.user.findUnique({ where: { nim: input.nim }, select: { id: true } });
+    if (nimDipakai) throw ApiError.conflict("NIM sudah terdaftar");
+  }
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id },
     data: {
       ...(input.nama !== undefined ? { nama: input.nama } : {}),
       ...(input.email !== undefined ? { email: input.email } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
+      ...(input.nim !== undefined ? { nim: input.nim || null } : {}),
+      ...(input.programStudi !== undefined ? { programStudi: input.programStudi || null } : {}),
+      ...(input.instansi !== undefined ? { instansi: input.instansi || null } : {}),
+      ...(input.noHp !== undefined ? { noHp: input.noHp || null } : {}),
     },
     select: PUBLIC_USER_SELECT,
   });
+  await logActivity({
+    actorId: actor.id,
+    action: "USER_UPDATE",
+    entityType: "USER",
+    entityId: id,
+    summary: `Perbarui akun ${updated.nama}`,
+    metadata: {
+      before: { nama: target.nama, email: target.email, role: target.role, nim: target.nim },
+      after: { nama: updated.nama, email: updated.email, role: updated.role, nim: updated.nim },
+    },
+  });
+  return updated;
 }
 
 /** Reset password oleh admin → password sementara dikembalikan SEKALI. */
@@ -162,6 +201,13 @@ export async function resetPassword(actor: Actor, id: string) {
     where: { id },
     data: { passwordHash, tokenVersion: { increment: 1 } },
   });
+  await logActivity({
+    actorId: actor.id,
+    action: "USER_RESET_PASSWORD",
+    entityType: "USER",
+    entityId: id,
+    summary: `Reset password ${target.nama}`,
+  });
 
   return { password };
 }
@@ -172,11 +218,19 @@ export async function setUserActive(actor: Actor, id: string, active: boolean) {
 
   if (!active) await assertBukanSuperadminTerakhir(target);
 
-  return prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id },
     data: active
       ? { isActive: true }
       : { isActive: false, tokenVersion: { increment: 1 } },
     select: PUBLIC_USER_SELECT,
   });
+  await logActivity({
+    actorId: actor.id,
+    action: active ? "USER_ACTIVATE" : "USER_DEACTIVATE",
+    entityType: "USER",
+    entityId: id,
+    summary: `${active ? "Aktifkan" : "Nonaktifkan"} akun ${target.nama}`,
+  });
+  return updated;
 }

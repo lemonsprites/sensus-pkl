@@ -12,6 +12,7 @@ import { redis } from "../lib/redis.js";
 import { K } from "../lib/redisKeys.js";
 import type { ImportRowPatchInput } from "../schemas/import.js";
 import { ApiError } from "../utils/apiError.js";
+import { logActivity } from "./activityService.js";
 import {
   applyRowPatch,
   parseImportFile,
@@ -515,6 +516,14 @@ export async function commitPreview(actor: Actor, batchId: string) {
 
   const committed = await getBatchOrThrow(batchId);
   await cleanupStaging(batchId);
+  await logActivity({
+    actorId: actor.id,
+    action: "IMPORT_COMMIT",
+    entityType: "IMPORT",
+    entityId: batchId,
+    summary: `Import SIMAN ${batch.filename}: ${inserted} baru, ${updated} diperbarui`,
+    metadata: { inserted, updated, rows: rows.length, snapshotAt: batch.snapshotAt.toISOString() },
+  });
   logger.info(
     { batchId, inserted, updated, rows: rows.length, durationMs: Date.now() - startedAt },
     "Import SIMAN di-commit",

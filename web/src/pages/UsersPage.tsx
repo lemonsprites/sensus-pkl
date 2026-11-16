@@ -106,6 +106,10 @@ export default function UsersPage() {
     email: "",
     password: "",
     role: "MAHASISWA" as Role,
+    nim: "",
+    programStudi: "",
+    instansi: "",
+    noHp: "",
   });
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -116,7 +120,10 @@ export default function UsersPage() {
     try {
       await api<User>("/users", { method: "POST", body: createForm });
       setNotice(`User ${createForm.email} dibuat.`);
-      setCreateForm({ nama: "", email: "", password: "", role: "MAHASISWA" });
+      setCreateForm({
+        nama: "", email: "", password: "", role: "MAHASISWA",
+        nim: "", programStudi: "", instansi: "", noHp: "",
+      });
       setCreateOpen(false);
       setPage(1);
       await load();
@@ -129,12 +136,19 @@ export default function UsersPage() {
 
   // ── Edit user ───────────────────────────────────────────────
   const [editing, setEditing] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ nama: "", email: "", role: "MAHASISWA" as Role });
+  const [editForm, setEditForm] = useState({
+    nama: "", email: "", role: "MAHASISWA" as Role,
+    nim: "", programStudi: "", instansi: "", noHp: "",
+  });
   const [savingEdit, setSavingEdit] = useState(false);
 
   const startEdit = (user: User) => {
     setEditing(user);
-    setEditForm({ nama: user.nama, email: user.email, role: user.role });
+    setEditForm({
+      nama: user.nama, email: user.email, role: user.role,
+      nim: user.nim ?? "", programStudi: user.programStudi ?? "",
+      instansi: user.instansi ?? "", noHp: user.noHp ?? "",
+    });
     setError("");
     setNotice("");
     setTempPassword(null);
@@ -310,6 +324,24 @@ export default function UsersPage() {
                   </Select>
                 </div>
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-nim">NIM</Label>
+                  <Input id="create-nim" value={createForm.nim} onChange={(event) => setCreateForm((form) => ({ ...form, nim: event.target.value }))} placeholder="untuk mahasiswa" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-prodi">Program studi</Label>
+                  <Input id="create-prodi" value={createForm.programStudi} onChange={(event) => setCreateForm((form) => ({ ...form, programStudi: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-instansi">Instansi / kampus</Label>
+                  <Input id="create-instansi" value={createForm.instansi} onChange={(event) => setCreateForm((form) => ({ ...form, instansi: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-hp">No. HP</Label>
+                  <Input id="create-hp" value={createForm.noHp} onChange={(event) => setCreateForm((form) => ({ ...form, noHp: event.target.value }))} />
+                </div>
+              </div>
               <Button type="submit" disabled={creating}>
                 {creating && <Loader2 className="animate-spin" />}
                 Simpan User
@@ -366,6 +398,24 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </Select>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-nim">NIM</Label>
+                  <Input id="edit-nim" value={editForm.nim} onChange={(event) => setEditForm((form) => ({ ...form, nim: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-prodi">Program studi</Label>
+                  <Input id="edit-prodi" value={editForm.programStudi} onChange={(event) => setEditForm((form) => ({ ...form, programStudi: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-instansi">Instansi / kampus</Label>
+                  <Input id="edit-instansi" value={editForm.instansi} onChange={(event) => setEditForm((form) => ({ ...form, instansi: event.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-hp">No. HP</Label>
+                  <Input id="edit-hp" value={editForm.noHp} onChange={(event) => setEditForm((form) => ({ ...form, noHp: event.target.value }))} />
                 </div>
               </div>
               <div className="flex gap-2">
@@ -470,8 +520,12 @@ export default function UsersPage() {
                         {user.id === actor?.id && (
                           <span className="ml-2 text-xs text-muted-foreground">(Anda)</span>
                         )}
+                        {user.nim && <div className="text-xs font-normal text-muted-foreground">NIM {user.nim}</div>}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.email}
+                        {user.programStudi && <div className="text-xs">{user.programStudi}</div>}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={user.role === "SUPERADMIN" ? "default" : "outline"}>
                           {ROLE_LABEL[user.role]}

@@ -1,3 +1,4 @@
+import { logActivity } from "./activityService.js";
 import { config } from "../lib/config.js";
 import { prisma } from "../lib/prisma.js";
 import type {
@@ -51,6 +52,7 @@ const GROUP_SELECT = {
   createdAt: true,
   updatedAt: true,
   createdBy: { select: { id: true, nama: true } },
+  updatedBy: { select: { id: true, nama: true } },
   sensus: { select: SENSUS_ROW_SELECT, orderBy: { createdAt: "asc" as const } },
 } as const;
 
@@ -226,7 +228,10 @@ export async function createSensusGrup(
   ruangId: string,
   input: CreateSensusGrupInput,
 ) {
-  const room = await prisma.ruang.findUnique({ where: { id: ruangId }, select: { id: true } });
+  const room = await prisma.ruang.findUnique({
+    where: { id: ruangId },
+    select: { id: true, nama: true, kode: true },
+  });
   if (!room) throw ApiError.notFound("Ruang tidak ditemukan");
 
   const satker = config.SATKER_KODE ?? "";
@@ -309,15 +314,36 @@ export async function createSensusGrup(
     { timeout: 60_000, maxWait: 10_000 },
   );
 
+  for (const group of groups) {
+    await logActivity({
+      actorId,
+      action: "GROUP_CREATE",
+      entityType: "SENSUS_GRUP",
+      entityId: group.id,
+      summary: `${group.namaBarang} ${group.jumlah} unit (${group.kondisi}) di ${room.nama} (${room.kode})`,
+      metadata: {
+        kodeBarang: group.kodeBarang,
+        jumlah: group.jumlah,
+        kondisi: group.kondisi,
+        nup: group.sensus.map((row) => row.masterAset.kodeSiman),
+      },
+    });
+  }
+
   return { groups };
 }
 
-export async function updateSensusGrup(grupId: string, input: UpdateSensusGrupInput) {
+export async function updateSensusGrup(actorId: string, grupId: string, input: UpdateSensusGrupInput) {
   const group = await prisma.sensusGrup.findUnique({
     where: { id: grupId },
     select: {
       id: true,
       status: true,
+      kodeBarang: true,
+      namaBarang: true,
+      jumlah: true,
+      kondisi: true,
+      catatan: true,
       sensus: { select: { id: true, labelPrintedAt: true, diverifikasiAt: true } },
     },
   });
@@ -335,6 +361,7 @@ export async function updateSensusGrup(grupId: string, input: UpdateSensusGrupIn
       data: {
         ...(input.kondisi ? { kondisi: input.kondisi } : {}),
         ...(input.catatan !== undefined ? { catatan: input.catatan } : {}),
+        updatedById: actorId,
       },
       select: GROUP_SELECT,
     });
@@ -344,19 +371,39 @@ export async function updateSensusGrup(grupId: string, input: UpdateSensusGrupIn
     return result;
   });
 
+  await logActivity({
+    actorId,
+    action: "GROUP_UPDATE",
+    entityType: "SENSUS_GRUP",
+    entityId: grupId,
+    summary: `Koreksi ${group.namaBarang} (${group.jumlah} unit)`,
+    metadata: {
+      before: { kondisi: group.kondisi, catatan: group.catatan },
+      after: { kondisi: input.kondisi ?? group.kondisi, catatan: input.catatan ?? group.catatan },
+    },
+  });
+
   return { group: updated };
 }
 
-export async function deleteSensusGrup(grupId: string) {
+export async function deleteSensusGrup(actor: { id: string; role: string }, grupId: string) {
   const group = await prisma.sensusGrup.findUnique({
     where: { id: grupId },
     select: {
       id: true,
       status: true,
-      sensus: { select: { labelPrintedAt: true, labelAppliedAt: true, diverifikasiAt: true } },
+      createdById: true,
+      kodeBarang: true,
+      namaBarang: true,
+      kondisi: true,
+      jumlah: true,
+      sensus: { select: { id: true, labelPrintedAt: true, labelAppliedAt: true, diverifikasiAt: true } },
     },
   });
   if (!group) throw ApiError.notFound("Grup sensus tidak ditemukan");
+  if (actor.role !== "ADMIN" && actor.role !== "SUPERADMIN" && group.createdById !== actor.id) {
+    throw ApiError.forbidden("Hanya pembuat grup atau ADMIN yang boleh menghapus");
+  }
   if (
     group.status === "VALIDATED" ||
     group.sensus.some((row) => row.labelPrintedAt || row.labelAppliedAt || row.diverifikasiAt)
@@ -367,6 +414,14 @@ export async function deleteSensusGrup(grupId: string) {
   await prisma.$transaction(async (tx) => {
     await tx.sensus.deleteMany({ where: { grupId } });
     await tx.sensusGrup.delete({ where: { id: grupId } });
+  });
+  await logActivity({
+    actorId: actor.id,
+    action: "GROUP_DELETE",
+    entityType: "SENSUS_GRUP",
+    entityId: grupId,
+    summary: `Hapus ${group.namaBarang} ${group.jumlah} unit (${group.kondisi})`,
+    metadata: { kodeBarang: group.kodeBarang, nup: group.sensus.map((row) => row.id) },
   });
 
   return { deleted: true };
@@ -397,6 +452,15 @@ export async function verifySensusGrup(actorId: string, grupId: string) {
       data: { status: "VALIDATED", docsComplete: true },
       select: GROUP_SELECT,
     });
+  });
+
+  await logActivity({
+    actorId,
+    action: "VERIFY",
+    entityType: "SENSUS_GRUP",
+    entityId: grupId,
+    summary: `Validasi grup ${updated.namaBarang} (${updated.jumlah} unit)`,
+    metadata: { nup: updated.sensus.map((row) => row.masterAset.kodeSiman) },
   });
 
   return { group: updated };
@@ -438,6 +502,15 @@ export async function rejectSensusGrup(actorId: string, grupId: string, catatan:
       data: { status: "ASSESSED", docsComplete: false },
       select: GROUP_SELECT,
     });
+  });
+
+  await logActivity({
+    actorId,
+    action: "REJECT",
+    entityType: "SENSUS_GRUP",
+    entityId: grupId,
+    summary: `Tolak grup ${updated.namaBarang} (${updated.jumlah} unit)`,
+    metadata: { catatan, nup: updated.sensus.map((row) => row.masterAset.kodeSiman) },
   });
 
   return { group: updated };

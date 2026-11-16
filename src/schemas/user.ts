@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { emailSchema, passwordSchema } from "./auth.js";
+import { emailSchema, passwordSchema, profileFieldsSchema } from "./auth.js";
 
 export const roleSchema = z.enum(["MAHASISWA", "ADMIN", "SUPERADMIN"]);
 
@@ -20,6 +20,7 @@ export const createUserSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   role: roleSchema.default("MAHASISWA"),
+  ...profileFieldsSchema.shape,
 });
 
 export const updateUserSchema = z
@@ -27,10 +28,19 @@ export const updateUserSchema = z
     nama: z.string().trim().min(1, "Nama wajib diisi").max(120).optional(),
     email: emailSchema.optional(),
     role: roleSchema.optional(),
+    ...profileFieldsSchema.shape,
   })
-  .refine((data) => data.nama !== undefined || data.email !== undefined || data.role !== undefined, {
-    message: "Tidak ada perubahan yang dikirim",
-  });
+  .refine(
+    (data) =>
+      data.nama !== undefined ||
+      data.email !== undefined ||
+      data.role !== undefined ||
+      data.nim !== undefined ||
+      data.programStudi !== undefined ||
+      data.instansi !== undefined ||
+      data.noHp !== undefined,
+    { message: "Tidak ada perubahan yang dikirim" },
+  );
 
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;

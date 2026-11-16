@@ -64,6 +64,13 @@
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body {
+    background: #fff !important;
+  }
   body * {
     visibility: hidden;
   }
@@ -80,5 +87,23 @@
   }
   .no-print {
     display: none !important;
+  }
+  .report-page {
+    break-after: page;
+    page-break-after: always;
+  }
+  .report-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .print-area table {
+    font-size: 10px;
+  }
+  .print-area thead {
+    display: table-header-group;
+  }
+  .print-area tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

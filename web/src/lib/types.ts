@@ -6,6 +6,10 @@ export interface User {
   email: string;
   role: Role;
   isActive: boolean;
+  nim: string | null;
+  programStudi: string | null;
+  instansi: string | null;
+  noHp: string | null;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -77,6 +81,7 @@ export interface SensusGrup {
   createdAt: string;
   updatedAt: string;
   createdBy: { id: string; nama: string };
+  updatedBy?: { id: string; nama: string } | null;
   sensus: Sensus[];
 }
 
@@ -301,6 +306,152 @@ export interface ImportPreview {
     invalidRows: number;
     backup: boolean;
   };
+}
+
+
+export interface ActivityLogItem {
+  id: string;
+  actorId: string | null;
+  actorNama: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  summary: string;
+  metadata: unknown;
+  createdAt: string;
+  actor: { id: string; nama: string; role: Role } | null;
+}
+
+export type LogListResponse = Paginated<ActivityLogItem>;
+
+export interface MonitoringUser {
+  id: string;
+  nama: string;
+  email: string;
+  role: Role;
+  nim: string | null;
+  programStudi: string | null;
+  instansi: string | null;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  groupsCreated: number;
+  nupAllocated: number;
+  docsUploaded: number;
+  corrections: number;
+  validatedGroups: number;
+  activityCount: number;
+  lastActivityAt: string | null;
+  ruangCount: number;
+  status: Record<SensusStatus, number>;
+}
+
+export interface MonitoringRoom {
+  id: string;
+  kode: string;
+  nama: string;
+  gedung: string;
+  groups: number;
+  nup: number;
+  docs: number;
+  contributors: number;
+  status: Record<SensusStatus, number>;
+  lastActivityAt: string;
+}
+
+export interface MonitoringResponse {
+  period: { from: string | null; to: string | null };
+  summary: {
+    totalGroups: number;
+    totalNup: number;
+    totalDocs: number;
+    totalStudents: number;
+    activeContributors: number;
+    validatedNup: number;
+    status: Record<SensusStatus, number>;
+  };
+  mahasiswa: MonitoringUser[];
+  ruang: MonitoringRoom[];
+}
+
+export interface AdminGroupItem {
+  id: string;
+  ruangId: string;
+  kodeBarang: string;
+  namaBarang: string;
+  kondisi: Kondisi;
+  jumlah: number;
+  status: SensusStatus;
+  docsComplete: boolean;
+  catatan: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: { id: string; nama: string; nim: string | null };
+  updatedBy: { id: string; nama: string } | null;
+  ruang: { id: string; kode: string; nama: string; bangunanAset: { nama: string } };
+  sensus: Array<{
+    id: string;
+    status: SensusStatus;
+    masterAset: { kodeSiman: string | null; kodeRegister: string | null };
+  }>;
+  dokumen: Array<{ id: string; jenis: string; createdAt: string; uploadedBy: { nama: string } }>;
+}
+
+export interface AdminGroupResponse extends Paginated<AdminGroupItem> {
+  statusCounts: Record<SensusStatus, number>;
+}
+
+export interface ReportData {
+  meta: {
+    generatedAt: string;
+    generatedBy: { id: string; role: Role };
+    periode: { from: string | null; to: string | null };
+    sekolah: string;
+    alamat: string;
+    kota: string;
+    satker: string | null;
+    scope: { buildingId: string | null; roomId: string | null; gedung: string[] };
+    signatures: { kepala: string; adminBmn: string; pembimbing: string };
+  };
+  summary: {
+    totalMaster: number;
+    totalSensus: number;
+    totalGroups: number;
+    totalNup: number;
+    totalDocs: number;
+    coverage: number;
+    conditions: Record<Kondisi, number>;
+    status: Record<SensusStatus, number>;
+    findings: number;
+    validatedGroups: number;
+  };
+  perRuang: Array<{
+    id: string; kode: string; nama: string; lantai: number; gedung: string;
+    groups: number; nup: number; docs: number;
+    conditions: Record<Kondisi, number>;
+    status: Record<SensusStatus, number>;
+  }>;
+  perGedung: Array<{
+    id: string; nama: string; kode: string; rooms: number; groups: number; nup: number;
+    docs: number; conditions: Record<Kondisi, number>;
+  }>;
+  findings: Array<{
+    grupId: string; ruang: string; gedung: string; namaBarang: string; kodeBarang: string;
+    kondisi: Kondisi; jumlah: number; status: SensusStatus; catatan: string | null;
+  }>;
+  contributors: Array<{
+    id: string; nama: string; nim: string | null; groups: number; nup: number;
+    docs: number; corrections: number; validated: number;
+  }>;
+  groups: Array<{
+    id: string; ruang: string; kodeRuang: string; lantai: number; gedung: string;
+    kodeBarang: string; namaBarang: string; kondisi: Kondisi; jumlah: number;
+    status: SensusStatus; docs: number;
+    nup: Array<{
+      kodeSiman: string | null; kodeRegister: string | null; nama: string;
+      status: SensusStatus; kondisi: Kondisi | null; temuanBaru: boolean;
+    }>;
+  }>;
+  logs: ActivityLogItem[];
 }
 
 export interface ImportBatchList {

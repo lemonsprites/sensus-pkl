@@ -4,6 +4,21 @@ import { currentUser, requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/role.js";
 import { validate } from "../middleware/validate.js";
 import { dashboardQuerySchema, type DashboardQuery } from "../schemas/dashboard.js";
+import { logQuerySchema, type LogQuery } from "../schemas/log.js";
+import {
+  adminGroupQuerySchema,
+  bulkVerifySchema,
+  monitoringQuerySchema,
+  type AdminGroupQuery,
+  type BulkVerifyInput,
+  type MonitoringQuery,
+} from "../schemas/monitoring.js";
+import {
+  reportExportQuerySchema,
+  reportQuerySchema,
+  type ReportExportQuery,
+  type ReportQuery,
+} from "../schemas/report.js";
 import {
   dokumenConfirmSchema,
   dokumenIdParamSchema,
@@ -37,10 +52,14 @@ import {
   type RuangParam,
   type UpdateSensusGrupInput,
 } from "../schemas/sensus.js";
+import * as activityService from "../services/activityService.js";
 import * as dashboardService from "../services/dashboardService.js";
 import * as dokumenService from "../services/dokumenService.js";
 import * as exportService from "../services/exportService.js";
 import * as labelService from "../services/labelService.js";
+import * as monitoringService from "../services/monitoringService.js";
+import * as reportService from "../services/reportService.js";
+import { buildReportDocx } from "../services/reportDocxService.js";
 import * as sensusService from "../services/sensusService.js";
 
 export const masterRouter = Router();
@@ -81,7 +100,7 @@ masterRouter.patch(
   async (req, res) => {
     const { id } = req.validated?.params as GrupParam;
     const body = req.validated?.body as UpdateSensusGrupInput;
-    res.json({ success: true, data: await sensusService.updateSensusGrup(id, body) });
+    res.json({ success: true, data: await sensusService.updateSensusGrup(currentUser(req).id, id, body) });
   },
 );
 
@@ -90,7 +109,7 @@ masterRouter.delete(
   validate({ params: grupParamSchema }),
   async (req, res) => {
     const { id } = req.validated?.params as GrupParam;
-    res.json({ success: true, data: await sensusService.deleteSensusGrup(id) });
+    res.json({ success: true, data: await sensusService.deleteSensusGrup(currentUser(req), id) });
   },
 );
 
@@ -156,7 +175,75 @@ masterRouter.delete(
   validate({ params: dokumenIdParamSchema }),
   async (req, res) => {
     const { id, dokumenId } = req.validated?.params as DokumenIdParam;
-    res.json({ success: true, data: await dokumenService.deleteDokumen(id, dokumenId) });
+    res.json({ success: true, data: await dokumenService.deleteDokumen(currentUser(req), id, dokumenId) });
+  },
+);
+
+masterRouter.get("/logs", validate({ query: logQuerySchema }), async (req, res) => {
+  const query = req.validated?.query as LogQuery;
+  res.json({ success: true, data: await activityService.listLogs(query) });
+});
+
+masterRouter.get(
+  "/monitoring/progress",
+  validate({ query: monitoringQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as MonitoringQuery;
+    res.json({ success: true, data: await monitoringService.getProgress(query) });
+  },
+);
+
+masterRouter.get(
+  "/admin/grup",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ query: adminGroupQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as AdminGroupQuery;
+    res.json({ success: true, data: await monitoringService.listAdminGroups(query) });
+  },
+);
+
+masterRouter.post(
+  "/admin/grup/bulk-verify",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ body: bulkVerifySchema }),
+  async (req, res) => {
+    const body = req.validated?.body as BulkVerifyInput;
+    res.json({
+      success: true,
+      data: await monitoringService.bulkVerify(currentUser(req).id, body.ids),
+    });
+  },
+);
+
+masterRouter.get(
+  "/report/summary",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ query: reportQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as ReportQuery;
+    res.json({ success: true, data: await reportService.getReportData(currentUser(req), query) });
+  },
+);
+
+masterRouter.get(
+  "/report/export",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ query: reportExportQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as ReportExportQuery;
+    const data = await reportService.getReportData(currentUser(req), query);
+    const buffer = await buildReportDocx(data);
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="laporan-sensus-${stamp}.docx"`,
+    );
+    res.send(buffer);
   },
 );
 
@@ -186,7 +273,7 @@ masterRouter.post(
   validate({ body: labelIdsSchema }),
   async (req, res) => {
     const body = req.validated?.body as LabelIdsInput;
-    res.json({ success: true, data: await labelService.printLabels(body.ids) });
+    res.json({ success: true, data: await labelService.printLabels(currentUser(req).id, body.ids) });
   },
 );
 
@@ -196,7 +283,7 @@ masterRouter.post(
   validate({ body: labelIdsSchema }),
   async (req, res) => {
     const body = req.validated?.body as LabelIdsInput;
-    res.json({ success: true, data: await labelService.applyLabels(body.ids) });
+    res.json({ success: true, data: await labelService.applyLabels(currentUser(req).id, body.ids) });
   },
 );
 
