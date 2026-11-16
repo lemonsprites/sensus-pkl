@@ -3,6 +3,8 @@ import { Router } from "express";
 import { currentUser, requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/role.js";
 import { validate } from "../middleware/validate.js";
+import { dashboardQuerySchema, type DashboardQuery } from "../schemas/dashboard.js";
+import { exportQuerySchema, type ExportQuery } from "../schemas/export.js";
 import {
   dokumenConfirmSchema,
   dokumenIdParamSchema,
@@ -13,6 +15,14 @@ import {
   type DokumenListParam,
   type DokumenPresignInput,
 } from "../schemas/dokumen.js";
+import {
+  labelIdsSchema,
+  labelQuerySchema,
+  scanParamSchema,
+  type LabelIdsInput,
+  type LabelQuery,
+  type ScanParam,
+} from "../schemas/label.js";
 import {
   rejectSensusSchema,
   roomAssetsQuerySchema,
@@ -25,7 +35,10 @@ import {
   type SensusParam,
   type SensusUpsertInput,
 } from "../schemas/sensus.js";
+import * as dashboardService from "../services/dashboardService.js";
 import * as dokumenService from "../services/dokumenService.js";
+import * as exportService from "../services/exportService.js";
+import * as labelService from "../services/labelService.js";
 import * as sensusService from "../services/sensusService.js";
 
 export const masterRouter = Router();
@@ -128,5 +141,70 @@ masterRouter.post(
       success: true,
       data: await sensusService.rejectSensus(currentUser(req).id, barangLamaId, body.catatan),
     });
+  },
+);
+
+/** M7 — dashboard 5 tab. */
+masterRouter.get(
+  "/dashboard",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ query: dashboardQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as DashboardQuery;
+    res.json({ success: true, data: await dashboardService.getDashboard(query) });
+  },
+);
+
+/** M8 — gate label + cetak/tempel + scan. */
+masterRouter.get(
+  "/label/eligible",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ query: labelQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as LabelQuery;
+    res.json({ success: true, data: await labelService.getEligible(query) });
+  },
+);
+
+masterRouter.post(
+  "/label/print",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ body: labelIdsSchema }),
+  async (req, res) => {
+    const body = req.validated?.body as LabelIdsInput;
+    res.json({ success: true, data: await labelService.printLabels(body.ids) });
+  },
+);
+
+masterRouter.post(
+  "/label/apply",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ body: labelIdsSchema }),
+  async (req, res) => {
+    const body = req.validated?.body as LabelIdsInput;
+    res.json({ success: true, data: await labelService.applyLabels(body.ids) });
+  },
+);
+
+masterRouter.get(
+  "/scan/:kodeRegister",
+  validate({ params: scanParamSchema }),
+  async (req, res) => {
+    const { kodeRegister } = req.validated?.params as ScanParam;
+    res.json({ success: true, data: await labelService.scanLabel(kodeRegister) });
+  },
+);
+
+/** M9 — export sensus CSV/XLSX. */
+masterRouter.get(
+  "/export/sensus",
+  requireRole("ADMIN", "SUPERADMIN"),
+  validate({ query: exportQuerySchema }),
+  async (req, res) => {
+    const query = req.validated?.query as ExportQuery;
+    const file = await exportService.exportSensus(query.format);
+    res.setHeader("Content-Type", file.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${file.filename}"`);
+    res.send(file.buffer);
   },
 );

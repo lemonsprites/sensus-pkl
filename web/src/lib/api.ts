@@ -93,3 +93,30 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
 
   return readEnvelope<T>(response);
 }
+
+/** Download biner (export CSV/XLSX) dengan Authorization Bearer. */
+export async function apiDownload(path: string): Promise<{ blob: Blob; filename: string }> {
+  const token = tokenStore.get();
+  const response = await fetch(`/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      tokenStore.clear();
+      window.dispatchEvent(new Event("auth:unauthorized"));
+    }
+    let message = `Unduhan gagal (HTTP ${response.status})`;
+    try {
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (payload.error?.message) message = payload.error.message;
+    } catch {
+      // abaikan
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  return { blob: await response.blob(), filename: match?.[1] ?? "unduhan" };
+}

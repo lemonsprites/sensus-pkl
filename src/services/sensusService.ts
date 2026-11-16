@@ -12,6 +12,7 @@ const SENSUS_SELECT = {
   isTemuanBaru: true,
   docsComplete: true,
   docsNote: true,
+  labelPrintedAt: true,
   labelAppliedAt: true,
   catatan: true,
   diverifikasiAt: true,

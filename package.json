@@ -22,7 +22,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
-    "seed:ruang": "tsx prisma/seedRuang.ts"
+    "seed:ruang": "tsx prisma/seedRuang.ts",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

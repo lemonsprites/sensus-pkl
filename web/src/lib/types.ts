@@ -213,3 +213,114 @@ export interface DokumenListResponse {
   docsComplete: boolean;
   items: DokumenItem[];
 }
+
+export type DashboardTab =
+  | "PERLU_DOKUMEN"
+  | "PERLU_VERIFIKASI"
+  | "PERLU_INPUT_SIMAN"
+  | "PERLU_CETAK"
+  | "PERLU_TEMPEL";
+
+export interface DashboardItem {
+  id: string;
+  status: SensusStatus;
+  jumlahFisik: number | null;
+  kondisi: Kondisi | null;
+  statusMatch: StatusMatch | null;
+  isTemuanBaru: boolean;
+  docsComplete: boolean;
+  labelPrintedAt: string | null;
+  labelAppliedAt: string | null;
+  updatedAt: string;
+  barangLama: {
+    id: string;
+    kodeRegister: string | null;
+    kodeBarang: string | null;
+    kodeSiman: string | null;
+    nama: string;
+    kategori: string | null;
+    kodeSatker: string | null;
+    statusAset: string | null;
+    ruang: {
+      id: string;
+      kode: string;
+      nama: string;
+      lantai: number;
+      bangunanAset: { id: string; nama: string };
+    } | null;
+  };
+  diinputOleh: { id: string; nama: string } | null;
+}
+
+export interface DashboardResponse {
+  counts: Record<DashboardTab, number>;
+  tab: DashboardTab;
+  items: DashboardItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface LabelItem {
+  sensusId: string;
+  barangLamaId: string;
+  nama: string;
+  kodeBarang: string | null;
+  kodeSiman: string | null;
+  kodeRegister: string | null;
+  kategori: string | null;
+  kodeSatker: string | null;
+  statusAset: string | null;
+  gedung: string | null;
+  ruang: string | null;
+  lantai: number | null;
+  printedAt: string | null;
+  appliedAt: string | null;
+  qrContent: string | null;
+}
+
+export interface LabelEligibleResponse {
+  items: LabelItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PrintLabelResponse {
+  printed: number;
+  labels: LabelItem[];
+}
+
+export interface ScanResponse {
+  asset: {
+    id: string;
+    kodeRegister: string | null;
+    kodeBarang: string | null;
+    kodeSiman: string | null;
+    nama: string;
+    kategori: string | null;
+    kodeSatker: string | null;
+    statusAset: string | null;
+    syncStatus: string;
+    ruang: {
+      kode: string;
+      nama: string;
+      lantai: number;
+      bangunanAset: { nama: string };
+    } | null;
+    sensus: {
+      id: string;
+      status: SensusStatus;
+      jumlahFisik: number | null;
+      kondisi: Kondisi | null;
+      statusMatch: StatusMatch | null;
+      isTemuanBaru: boolean;
+      docsComplete: boolean;
+      labelPrintedAt: string | null;
+      labelAppliedAt: string | null;
+      catatan: string | null;
+      diverifikasiAt: string | null;
+    } | null;
+  };
+  gate: { ok: boolean; reasons: string[] };
+}

@@ -1,4 +1,4 @@
-import { Building2, FileSpreadsheet, LogOut, ShieldCheck, UserRound, Users } from "lucide-react";
+import { Building2, FileSpreadsheet, LayoutDashboard, LogOut, Printer, ScanLine, ShieldCheck, UserRound, Users } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/auth/auth-context";
@@ -47,6 +47,19 @@ export function AppLayout() {
             >
               <Building2 className="size-4" /> Hierarki
             </NavLink>
+            {isAdmin && (
+              <NavLink
+                to="/dashboard"
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                    isActive && "bg-muted font-medium",
+                  )
+                }
+              >
+                <LayoutDashboard className="size-4" /> Dashboard
+              </NavLink>
+            )}
             <NavLink
               to="/profil"
               className={({ isActive }) =>
@@ -72,6 +85,17 @@ export function AppLayout() {
                   <FileSpreadsheet className="size-4" /> Import SIMAN
                 </NavLink>
                 <NavLink
+                  to="/label"
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                      isActive && "bg-muted font-medium",
+                    )
+                  }
+                >
+                  <Printer className="size-4" /> Label
+                </NavLink>
+                <NavLink
                   to="/users"
                   className={({ isActive }) =>
                     cn(
@@ -84,6 +108,17 @@ export function AppLayout() {
                 </NavLink>
               </>
             )}
+            <NavLink
+              to="/scan"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                  isActive && "bg-muted font-medium",
+                )
+              }
+            >
+              <ScanLine className="size-4" /> Scan
+            </NavLink>
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
