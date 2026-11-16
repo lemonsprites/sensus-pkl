@@ -72,7 +72,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [tempPassword, setTempPassword] = useState<{ email: string; password: string } | null>(
+  const [tempPassword, setTempPassword] = useState<{ username: string; password: string } | null>(
     null,
   );
 
@@ -103,7 +103,7 @@ export default function UsersPage() {
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     nama: "",
-    email: "",
+    username: "",
     password: "",
     role: "MAHASISWA" as Role,
     nim: "",
@@ -119,9 +119,9 @@ export default function UsersPage() {
     setNotice("");
     try {
       await api<User>("/users", { method: "POST", body: createForm });
-      setNotice(`User ${createForm.email} dibuat.`);
+      setNotice(`User ${createForm.username} dibuat.`);
       setCreateForm({
-        nama: "", email: "", password: "", role: "MAHASISWA",
+        nama: "", username: "", password: "", role: "MAHASISWA",
         nim: "", programStudi: "", instansi: "", noHp: "",
       });
       setCreateOpen(false);
@@ -137,7 +137,7 @@ export default function UsersPage() {
   // ── Edit user ───────────────────────────────────────────────
   const [editing, setEditing] = useState<User | null>(null);
   const [editForm, setEditForm] = useState({
-    nama: "", email: "", role: "MAHASISWA" as Role,
+    nama: "", username: "", role: "MAHASISWA" as Role,
     nim: "", programStudi: "", instansi: "", noHp: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
@@ -145,7 +145,7 @@ export default function UsersPage() {
   const startEdit = (user: User) => {
     setEditing(user);
     setEditForm({
-      nama: user.nama, email: user.email, role: user.role,
+      nama: user.nama, username: user.username, role: user.role,
       nim: user.nim ?? "", programStudi: user.programStudi ?? "",
       instansi: user.instansi ?? "", noHp: user.noHp ?? "",
     });
@@ -162,7 +162,7 @@ export default function UsersPage() {
     setNotice("");
     try {
       await api<User>(`/users/${editing.id}`, { method: "PATCH", body: editForm });
-      setNotice(`User ${editForm.email} diperbarui.`);
+      setNotice(`User ${editForm.username} diperbarui.`);
       setEditing(null);
       await load();
     } catch (cause) {
@@ -176,7 +176,7 @@ export default function UsersPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const handleReset = async (user: User) => {
-    if (!window.confirm(`Reset password ${user.email}? Token lama user ini akan mati.`)) return;
+    if (!window.confirm(`Reset password ${user.username}? Token lama user ini akan mati.`)) return;
     setBusyId(user.id);
     setError("");
     setNotice("");
@@ -185,7 +185,7 @@ export default function UsersPage() {
       const result = await api<{ password: string }>(`/users/${user.id}/reset-password`, {
         method: "POST",
       });
-      setTempPassword({ email: user.email, password: result.password });
+      setTempPassword({ username: user.username, password: result.password });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal reset password");
     } finally {
@@ -195,7 +195,7 @@ export default function UsersPage() {
 
   const handleToggleActive = async (user: User) => {
     const activate = !user.isActive;
-    if (!window.confirm(`${activate ? "Aktifkan" : "Nonaktifkan"} ${user.email}?`)) return;
+    if (!window.confirm(`${activate ? "Aktifkan" : "Nonaktifkan"} ${user.username}?`)) return;
     setBusyId(user.id);
     setError("");
     setNotice("");
@@ -203,7 +203,7 @@ export default function UsersPage() {
       await api<User>(`/users/${user.id}/${activate ? "activate" : "deactivate"}`, {
         method: "POST",
       });
-      setNotice(`${user.email} ${activate ? "diaktifkan" : "dinonaktifkan"}.`);
+      setNotice(`${user.username} ${activate ? "diaktifkan" : "dinonaktifkan"}.`);
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal mengubah status user");
@@ -256,7 +256,7 @@ export default function UsersPage() {
           <AlertDescription>
             <div className="mt-1 font-mono text-base">{tempPassword.password}</div>
             <div className="text-xs">
-              untuk {tempPassword.email}. Password ini tidak bisa ditampilkan lagi.
+              untuk {tempPassword.username}. Password ini tidak bisa ditampilkan lagi.
             </div>
           </AlertDescription>
         </Alert>
@@ -283,14 +283,16 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="create-email">Email</Label>
+                  <Label htmlFor="create-username">Username</Label>
                   <Input
-                    id="create-email"
-                    type="email"
-                    value={createForm.email}
+                    id="create-username"
+                    autoComplete="username"
+                    value={createForm.username}
                     onChange={(event) =>
-                      setCreateForm((form) => ({ ...form, email: event.target.value }))
+                      setCreateForm((form) => ({ ...form, username: event.target.value }))
                     }
+                    minLength={3}
+                    maxLength={40}
                     required
                   />
                 </div>
@@ -355,7 +357,7 @@ export default function UsersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Edit User</CardTitle>
-            <CardDescription>{editing.email}</CardDescription>
+            <CardDescription>{editing.username}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleEdit} className="space-y-4">
@@ -372,14 +374,16 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
+                  <Label htmlFor="edit-username">Username</Label>
                   <Input
-                    id="edit-email"
-                    type="email"
-                    value={editForm.email}
+                    id="edit-username"
+                    autoComplete="username"
+                    value={editForm.username}
                     onChange={(event) =>
-                      setEditForm((form) => ({ ...form, email: event.target.value }))
+                      setEditForm((form) => ({ ...form, username: event.target.value }))
                     }
+                    minLength={3}
+                    maxLength={40}
                     required
                   />
                 </div>
@@ -448,7 +452,7 @@ export default function UsersPage() {
               }}
             >
               <div className="min-w-48 flex-1 space-y-2">
-                <Label htmlFor="search">Cari nama/email</Label>
+                <Label htmlFor="search">Cari nama/username</Label>
                 <Input
                   id="search"
                   value={search}
@@ -504,7 +508,7 @@ export default function UsersPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nama</TableHead>
-                  <TableHead>Email</TableHead>
+                  <TableHead>Username</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Login terakhir</TableHead>
@@ -523,7 +527,7 @@ export default function UsersPage() {
                         {user.nim && <div className="text-xs font-normal text-muted-foreground">NIM {user.nim}</div>}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {user.email}
+                        @{user.username}
                         {user.programStudi && <div className="text-xs">{user.programStudi}</div>}
                       </TableCell>
                       <TableCell>
@@ -545,7 +549,7 @@ export default function UsersPage() {
                             size="icon"
                             variant="ghost"
                             title="Edit"
-                            aria-label={`Edit ${user.email}`}
+                            aria-label={`Edit ${user.username}`}
                             disabled={!canManage(user)}
                             onClick={() => startEdit(user)}
                           >
@@ -555,7 +559,7 @@ export default function UsersPage() {
                             size="icon"
                             variant="ghost"
                             title="Reset password"
-                            aria-label={`Reset password ${user.email}`}
+                            aria-label={`Reset password ${user.username}`}
                             disabled={!canManage(user) || busyId === user.id}
                             onClick={() => void handleReset(user)}
                           >
@@ -565,7 +569,7 @@ export default function UsersPage() {
                             size="icon"
                             variant="ghost"
                             title={user.isActive ? "Nonaktifkan" : "Aktifkan"}
-                            aria-label={`${user.isActive ? "Nonaktifkan" : "Aktifkan"} ${user.email}`}
+                            aria-label={`${user.isActive ? "Nonaktifkan" : "Aktifkan"} ${user.username}`}
                             disabled={!canManage(user) || busyId === user.id}
                             onClick={() => void handleToggleActive(user)}
                           >

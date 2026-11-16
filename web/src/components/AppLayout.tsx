@@ -171,7 +171,7 @@ export function AppLayout() {
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right text-xs leading-tight sm:block">
               <div className="font-medium">{user.nama}</div>
-              <div className="text-muted-foreground">{user.email}</div>
+              <div className="text-muted-foreground">@{user.username}</div>
             </div>
             <Badge variant={user.role === "SUPERADMIN" ? "default" : "secondary"}>
               {ROLE_LABEL[user.role]}

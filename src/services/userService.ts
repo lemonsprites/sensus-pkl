@@ -77,7 +77,7 @@ export async function listUsers(actor: Actor, query: ListUsersQuery) {
   if (query.q) {
     where.OR = [
       { nama: { contains: query.q, mode: "insensitive" } },
-      { email: { contains: query.q, mode: "insensitive" } },
+      { username: { contains: query.q, mode: "insensitive" } },
       { nim: { contains: query.q, mode: "insensitive" } },
     ];
   }
@@ -102,10 +102,10 @@ export async function createUser(actor: Actor, input: CreateUserInput) {
   assertBolehBuatRole(actor, input.role);
 
   const existing = await prisma.user.findUnique({
-    where: { email: input.email },
+    where: { username: input.username },
     select: { id: true },
   });
-  if (existing) throw ApiError.conflict("Email sudah terdaftar");
+  if (existing) throw ApiError.conflict("Username sudah terdaftar");
   if (input.nim) {
     const nimDipakai = await prisma.user.findUnique({ where: { nim: input.nim }, select: { id: true } });
     if (nimDipakai) throw ApiError.conflict("NIM sudah terdaftar");
@@ -116,7 +116,7 @@ export async function createUser(actor: Actor, input: CreateUserInput) {
   const created = await prisma.user.create({
     data: {
       nama: input.nama,
-      email: input.email,
+      username: input.username,
       passwordHash,
       role: input.role,
       nim: input.nim || null,
@@ -132,7 +132,7 @@ export async function createUser(actor: Actor, input: CreateUserInput) {
     entityType: "USER",
     entityId: created.id,
     summary: `Buat akun ${created.nama} (${created.role})`,
-    metadata: { email: created.email, role: created.role, nim: created.nim },
+    metadata: { username: created.username, role: created.role, nim: created.nim },
   });
   return created;
 }
@@ -150,12 +150,12 @@ export async function updateUser(actor: Actor, id: string, input: UpdateUserInpu
     }
   }
 
-  if (input.email !== undefined && input.email !== target.email) {
+  if (input.username !== undefined && input.username !== target.username) {
     const existing = await prisma.user.findUnique({
-      where: { email: input.email },
+      where: { username: input.username },
       select: { id: true },
     });
-    if (existing) throw ApiError.conflict("Email sudah terdaftar");
+    if (existing) throw ApiError.conflict("Username sudah terdaftar");
   }
   if (input.nim !== undefined && input.nim && input.nim !== target.nim) {
     const nimDipakai = await prisma.user.findUnique({ where: { nim: input.nim }, select: { id: true } });
@@ -166,7 +166,7 @@ export async function updateUser(actor: Actor, id: string, input: UpdateUserInpu
     where: { id },
     data: {
       ...(input.nama !== undefined ? { nama: input.nama } : {}),
-      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.username !== undefined ? { username: input.username } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.nim !== undefined ? { nim: input.nim || null } : {}),
       ...(input.programStudi !== undefined ? { programStudi: input.programStudi || null } : {}),
@@ -182,8 +182,8 @@ export async function updateUser(actor: Actor, id: string, input: UpdateUserInpu
     entityId: id,
     summary: `Perbarui akun ${updated.nama}`,
     metadata: {
-      before: { nama: target.nama, email: target.email, role: target.role, nim: target.nim },
-      after: { nama: updated.nama, email: updated.email, role: updated.role, nim: updated.nim },
+      before: { nama: target.nama, username: target.username, role: target.role, nim: target.nim },
+      after: { nama: updated.nama, username: updated.username, role: updated.role, nim: updated.nim },
     },
   });
   return updated;

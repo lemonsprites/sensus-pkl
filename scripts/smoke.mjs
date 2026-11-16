@@ -28,16 +28,17 @@ async function request(path, options = {}) {
 const health = await request("/health");
 check("health ok", health.status === 200 && health.body?.ok === true, JSON.stringify(health.body));
 
-const email = process.env.SEED_SUPERADMIN_EMAIL;
+const username =
+  process.env.SEED_SUPERADMIN_USERNAME ?? process.env.SEED_SUPERADMIN_EMAIL?.split("@")[0];
 const password = process.env.SEED_SUPERADMIN_PASSWORD;
 
-if (!email || !password) {
-  check("SEED_SUPERADMIN_EMAIL/PASSWORD tersedia", false);
+if (!username || !password) {
+  check("SEED_SUPERADMIN_USERNAME/PASSWORD tersedia", false);
 } else {
   const login = await request("/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ username, password }),
   });
   check("login SUPERADMIN", login.status === 200 && !!login.body?.data?.token, String(login.status));
 

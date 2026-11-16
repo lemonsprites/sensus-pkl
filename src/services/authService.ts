@@ -12,7 +12,7 @@ export const BCRYPT_ROUNDS = 12;
 export const PUBLIC_USER_SELECT = {
   id: true,
   nama: true,
-  email: true,
+  username: true,
   role: true,
   isActive: true,
   nim: true,
@@ -33,15 +33,15 @@ export function generateTempPassword(): string {
   return randomBytes(12).toString("base64url").slice(0, 16);
 }
 
-/** Login email+password → JWT (berisi tokenVersion saat ini). */
-export async function login(email: string, password: string) {
+/** Login username+password → JWT (berisi tokenVersion saat ini). */
+export async function login(username: string, password: string) {
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { username },
     select: { ...PUBLIC_USER_SELECT, passwordHash: true, tokenVersion: true },
   });
 
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-    throw ApiError.unauthorized("Email atau password salah");
+    throw ApiError.unauthorized("Username atau password salah");
   }
   if (!user.isActive) {
     throw ApiError.forbidden("Akun dinonaktifkan. Hubungi admin sekolah.");
@@ -68,7 +68,7 @@ export async function login(email: string, password: string) {
     user: {
       id: user.id,
       nama: user.nama,
-      email: user.email,
+      username: user.username,
       role: user.role,
       isActive: user.isActive,
       nim: user.nim,
@@ -110,13 +110,20 @@ export async function updateMe(
   userId: string,
   input: {
     nama?: string;
-    email?: string;
+    username?: string;
     nim?: string;
     programStudi?: string;
     instansi?: string;
     noHp?: string;
   },
 ) {
+  if (input.username) {
+    const existing = await prisma.user.findUnique({
+      where: { username: input.username },
+      select: { id: true },
+    });
+    if (existing && existing.id !== userId) throw ApiError.conflict("Username sudah dipakai akun lain");
+  }
   if (input.nim) {
     const existing = await prisma.user.findUnique({ where: { nim: input.nim }, select: { id: true } });
     if (existing && existing.id !== userId) throw ApiError.conflict("NIM sudah dipakai akun lain");
@@ -125,7 +132,7 @@ export async function updateMe(
     where: { id: userId },
     data: {
       ...(input.nama !== undefined ? { nama: input.nama } : {}),
-      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.username !== undefined ? { username: input.username } : {}),
       ...(input.nim !== undefined ? { nim: input.nim || null } : {}),
       ...(input.programStudi !== undefined ? { programStudi: input.programStudi || null } : {}),
       ...(input.instansi !== undefined ? { instansi: input.instansi || null } : {}),

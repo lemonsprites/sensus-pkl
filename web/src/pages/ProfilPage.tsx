@@ -27,7 +27,7 @@ export default function ProfilPage() {
   const { user, refresh } = useAuth();
 
   const [nama, setNama] = useState(user?.nama ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
+  const [username, setUsername] = useState(user?.username ?? "");
   const [nim, setNim] = useState(user?.nim ?? "");
   const [programStudi, setProgramStudi] = useState(user?.programStudi ?? "");
   const [instansi, setInstansi] = useState(user?.instansi ?? "");
@@ -47,7 +47,7 @@ export default function ProfilPage() {
 
   const profilDirty =
     nama.trim() !== user.nama ||
-    email.trim() !== user.email ||
+    username.trim() !== user.username ||
     nim.trim() !== (user.nim ?? "") ||
     programStudi.trim() !== (user.programStudi ?? "") ||
     instansi.trim() !== (user.instansi ?? "") ||
@@ -62,13 +62,13 @@ export default function ProfilPage() {
       const updated = await api<User>("/me", {
         method: "PATCH",
         body: {
-          nama: nama.trim(), email: email.trim(),
+          nama: nama.trim(), username: username.trim(),
           nim: nim.trim(), programStudi: programStudi.trim(),
           instansi: instansi.trim(), noHp: noHp.trim(),
         },
       });
       setNama(updated.nama);
-      setEmail(updated.email);
+      setUsername(updated.username);
       setNim(updated.nim ?? "");
       setProgramStudi(updated.programStudi ?? "");
       setInstansi(updated.instansi ?? "");
@@ -119,7 +119,7 @@ export default function ProfilPage() {
         </div>
         <div>
           <h1 className="text-xl font-semibold">{user.nama}</h1>
-          <p className="text-sm text-muted-foreground">{user.email}</p>
+          <p className="text-sm text-muted-foreground">@{user.username}</p>
         </div>
         <Badge variant={user.role === "SUPERADMIN" ? "default" : "secondary"}>
           {ROLE_LABEL[user.role]}
@@ -130,7 +130,7 @@ export default function ProfilPage() {
       <Card>
         <CardHeader>
           <CardTitle>Data Profil</CardTitle>
-          <CardDescription>Nama dan email yang dipakai untuk login.</CardDescription>
+          <CardDescription>Nama dan username yang dipakai untuk login.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSaveProfil} className="space-y-4">
@@ -156,12 +156,14 @@ export default function ProfilPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="username">Username</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  id="username"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  minLength={3}
+                  maxLength={40}
                   required
                 />
               </div>

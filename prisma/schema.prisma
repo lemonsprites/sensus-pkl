@@ -54,7 +54,10 @@ enum JenisDokumen {
 model User {
   id           String   @id @default(uuid())
   nama         String
-  email        String   @unique
+  /// Kredensial login utama.
+  username     String   @unique
+  /// Legacy/contact saja; tidak dipakai autentikasi.
+  email        String?  @unique
   passwordHash String
   role         Role     @default(MAHASISWA)
   isActive     Boolean  @default(true)

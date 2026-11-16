@@ -20,7 +20,7 @@ export default function LoginPage() {
   const { user, loading, login } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -33,7 +33,7 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await login(email.trim(), password);
+      await login(username.trim(), password);
       navigate("/hierarki", { replace: true });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal login");
@@ -61,15 +61,14 @@ export default function LoginPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                autoComplete="email"
+                id="username"
+                autoComplete="username"
                 required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="nama@sekolah.sch.id"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="username"
               />
             </div>
 

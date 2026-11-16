@@ -52,7 +52,7 @@ export async function getProgress(query: MonitoringQuery) {
           : {}),
       },
       select: {
-        id: true, nama: true, email: true, role: true, nim: true,
+        id: true, nama: true, username: true, role: true, nim: true,
         programStudi: true, instansi: true, isActive: true, lastLoginAt: true,
       },
       orderBy: { nama: "asc" },

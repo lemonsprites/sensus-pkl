@@ -29,7 +29,7 @@ Salin `.env.example` → `.env` (jangan commit). Variabel wajib:
 | `SATKER_KODE` | Kode satker sekolah (validasi import + gate label). |
 | `NUP_REGEX` | Regex NUP (contoh `^[0-9]+$`). |
 | `QR_CONTENT_FORMAT` | Default `kode_register` (isi QR = Kode Register SIMAN). |
-| `SEED_SUPERADMIN_EMAIL` / `SEED_SUPERADMIN_PASSWORD` | Seeder SUPERADMIN. Password kosong → digenerate & dicetak sekali. |
+| `SEED_SUPERADMIN_USERNAME` / `SEED_SUPERADMIN_PASSWORD` | Seeder SUPERADMIN; login memakai username. Password kosong → digenerate & dicetak sekali. `SEED_SUPERADMIN_EMAIL` lama masih dibaca sebagai fallback (bagian sebelum `@`). |
 | `IMPORT_MAX_ROWS` / `IMPORT_MAX_SIZE_MB` / `IMPORT_TTL_SECONDS` | Batas staging import (default 50.000 / 50 MB / 2 jam). |
 | `LOG_LEVEL` | `info`/`debug`. |
 
@@ -51,6 +51,8 @@ npm run worker
 ```
 
 Jangan scale worker > 1 instance untuk job non-idempoten.
+
+**Login memakai username, bukan email.** Migration `20261117130000_username_auth` mengisi username dari bagian sebelum `@` pada email lama (mis. `superadmin@sensus.local` → `superadmin`). `SEED_SUPERADMIN_EMAIL` lama tetap dibaca sebagai fallback seeder, tetapi konfigurasi baru sebaiknya memakai `SEED_SUPERADMIN_USERNAME`.
 
 ## 4. MinIO
 
@@ -150,7 +152,7 @@ curl -s https://<domain>/api/health
 # {"ok":true,"pg":true,"redis":true,"minio":true,...}
 
 npm run smoke
-# butuh SEED_SUPERADMIN_EMAIL/PASSWORD di .env; opsional SMOKE_KODE_REGISTER
+# butuh SEED_SUPERADMIN_USERNAME/PASSWORD di .env; opsional SMOKE_KODE_REGISTER
 ```
 
 ## 10. Aset kop surat

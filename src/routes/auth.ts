@@ -11,7 +11,7 @@ export const authRouter = Router();
 /** POST /api/auth/login — 5 percobaan/menit/IP. */
 authRouter.post("/login", loginLimiter, validate({ body: loginSchema }), async (req, res) => {
   const body = req.validated?.body as LoginInput;
-  const result = await authService.login(body.email, body.password);
+  const result = await authService.login(body.username, body.password);
   res.json({ success: true, data: result });
 });
 

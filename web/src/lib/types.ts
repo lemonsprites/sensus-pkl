@@ -3,7 +3,7 @@ export type Role = "MAHASISWA" | "ADMIN" | "SUPERADMIN";
 export interface User {
   id: string;
   nama: string;
-  email: string;
+  username: string;
   role: Role;
   isActive: boolean;
   nim: string | null;
@@ -327,7 +327,7 @@ export type LogListResponse = Paginated<ActivityLogItem>;
 export interface MonitoringUser {
   id: string;
   nama: string;
-  email: string;
+  username: string;
   role: Role;
   nim: string | null;
   programStudi: string | null;

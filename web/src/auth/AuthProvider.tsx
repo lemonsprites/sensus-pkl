@@ -37,10 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (username: string, password: string) => {
     const result = await api<LoginResult>("/auth/login", {
       method: "POST",
-      body: { email, password },
+      body: { username, password },
     });
     tokenStore.set(result.token);
     setUser(result.user);

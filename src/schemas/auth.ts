@@ -1,13 +1,14 @@
 import { z } from "zod";
 
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const USERNAME_RE = /^[a-z0-9._-]+$/;
 
-export const emailSchema = z
+export const usernameSchema = z
   .string()
   .trim()
-  .min(1, "Email wajib diisi")
+  .min(3, "Username minimal 3 karakter")
+  .max(40, "Username maksimal 40 karakter")
   .transform((v) => v.toLowerCase())
-  .refine((v) => EMAIL_RE.test(v), "Format email tidak valid");
+  .refine((v) => USERNAME_RE.test(v), "Username hanya boleh huruf, angka, titik, garis bawah, dan tanda hubung");
 
 export const passwordSchema = z
   .string()
@@ -15,7 +16,7 @@ export const passwordSchema = z
   .max(72, "Password maksimal 72 karakter");
 
 export const loginSchema = z.object({
-  email: emailSchema,
+  username: usernameSchema,
   password: z.string().min(1, "Password wajib diisi"),
 });
 
@@ -29,13 +30,13 @@ export const profileFieldsSchema = z.object({
 export const updateMeSchema = z
   .object({
     nama: z.string().trim().min(1, "Nama wajib diisi").max(120).optional(),
-    email: emailSchema.optional(),
+    username: usernameSchema.optional(),
     ...profileFieldsSchema.shape,
   })
   .refine(
     (data) =>
       data.nama !== undefined ||
-      data.email !== undefined ||
+      data.username !== undefined ||
       data.nim !== undefined ||
       data.programStudi !== undefined ||
       data.instansi !== undefined ||

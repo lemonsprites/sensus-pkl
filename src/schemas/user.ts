@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { emailSchema, passwordSchema, profileFieldsSchema } from "./auth.js";
+import { passwordSchema, profileFieldsSchema, usernameSchema } from "./auth.js";
 
 export const roleSchema = z.enum(["MAHASISWA", "ADMIN", "SUPERADMIN"]);
 
@@ -17,7 +17,7 @@ export const listUsersQuerySchema = z.object({
 
 export const createUserSchema = z.object({
   nama: z.string().trim().min(1, "Nama wajib diisi").max(120),
-  email: emailSchema,
+  username: usernameSchema,
   password: passwordSchema,
   role: roleSchema.default("MAHASISWA"),
   ...profileFieldsSchema.shape,
@@ -26,14 +26,14 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z
   .object({
     nama: z.string().trim().min(1, "Nama wajib diisi").max(120).optional(),
-    email: emailSchema.optional(),
+    username: usernameSchema.optional(),
     role: roleSchema.optional(),
     ...profileFieldsSchema.shape,
   })
   .refine(
     (data) =>
       data.nama !== undefined ||
-      data.email !== undefined ||
+      data.username !== undefined ||
       data.role !== undefined ||
       data.nim !== undefined ||
       data.programStudi !== undefined ||

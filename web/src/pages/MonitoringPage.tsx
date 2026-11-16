@@ -68,7 +68,7 @@ export default function MonitoringPage() {
       cell: (row) => (
         <div>
           <div className="font-medium">{row.nama}</div>
-          <div className="text-xs text-muted-foreground">{row.nim ?? row.email}</div>
+          <div className="text-xs text-muted-foreground">{row.nim ?? `@${row.username}`}</div>
         </div>
       ),
     },

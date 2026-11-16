@@ -24,6 +24,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET minimal 32 karakter"),
   JWT_EXPIRES_IN: z.string().default("12h"),
 
+  SEED_SUPERADMIN_USERNAME: z.string().optional(),
+  /** @deprecated fallback kompatibilitas; gunakan SEED_SUPERADMIN_USERNAME. */
   SEED_SUPERADMIN_EMAIL: z.string().optional(),
   SEED_SUPERADMIN_PASSWORD: z.string().optional(),
 

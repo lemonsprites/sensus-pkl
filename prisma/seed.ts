@@ -1,35 +1,37 @@
 /**
  * Seeder SUPERADMIN.
- * - Idempoten: kalau email sudah ada, TIDAK mengubah password/role.
+ * - Idempoten: kalau username sudah ada, TIDAK mengubah password/role.
  * - SEED_SUPERADMIN_PASSWORD kosong → generate acak dan cetak SEKALI.
  */
 import { config } from "../src/lib/config.js";
 import { prisma } from "../src/lib/prisma.js";
 import { generateTempPassword, hashPassword } from "../src/services/authService.js";
 
-const email = config.SEED_SUPERADMIN_EMAIL?.trim().toLowerCase();
+const configuredUsername =
+  config.SEED_SUPERADMIN_USERNAME ?? config.SEED_SUPERADMIN_EMAIL?.split("@")[0];
+const username = configuredUsername?.trim().toLowerCase();
 
-if (!email) {
-  console.log("[seed] SEED_SUPERADMIN_EMAIL kosong — dilewati.");
+if (!username) {
+  console.log("[seed] SEED_SUPERADMIN_USERNAME kosong — dilewati.");
 } else {
   const existing = await prisma.user.findUnique({
-    where: { email },
+    where: { username },
     select: { id: true, role: true },
   });
 
   if (existing) {
-    console.log(`[seed] ${email} sudah ada (role ${existing.role}) — tidak diubah.`);
+    console.log(`[seed] ${username} sudah ada (role ${existing.role}) — tidak diubah.`);
   } else {
     const configured = config.SEED_SUPERADMIN_PASSWORD?.trim();
     const password = configured || generateTempPassword();
     const passwordHash = await hashPassword(password);
 
     const user = await prisma.user.create({
-      data: { nama: "Superadmin", email, passwordHash, role: "SUPERADMIN" },
-      select: { id: true, email: true },
+      data: { nama: "Superadmin", username, passwordHash, role: "SUPERADMIN" },
+      select: { id: true, username: true },
     });
 
-    console.log(`[seed] SUPERADMIN dibuat: ${user.email}`);
+    console.log(`[seed] SUPERADMIN dibuat: ${user.username}`);
     if (!configured) {
       console.log(`[seed] Password generated (catat SEKALI, tidak akan ditampilkan lagi): ${password}`);
     }
