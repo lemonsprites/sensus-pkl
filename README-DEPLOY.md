@@ -123,10 +123,13 @@ Input: `data/ruangan.csv` (turunan `data/ruangan.xlsx`). Semua ruang dibuat **ko
 - Aksi: validasi, tolak dengan alasan, serta **validasi massal** untuk grup `DOCS_COMPLETE` terpilih.
 
 ### Laporan resmi
-- Menu **Laporan** (`/laporan`) untuk ADMIN/SUPERADMIN.
-- Konfigurasi: periode, gedung/ruang, identitas sekolah, kota, dan penandatangan (Kepala Madrasah, Admin BMN, Dosen Pembimbing).
-- Halaman siap **cetak/PDF A4** (cover, lembar pengesahan, ringkasan eksekutif, rekap gedung/ruang, temuan, kontribusi mahasiswa, log, kesimpulan).
-- Tombol **Export DOCX** menghasilkan file Word resmi yang dapat diedit. Endpoint: `GET /api/report/export`.
+- Menu **Laporan** (`/laporan`) tersedia untuk semua role. **Mahasiswa hanya dapat membuat laporan dirinya sendiri**; ADMIN/SUPERADMIN dapat membuat laporan seluruh sekolah atau memilih mahasiswa tertentu.
+- Admin dapat membuka laporan per mahasiswa langsung dari kolom **Laporan** di halaman Monitoring (`/laporan?userId=<id>`).
+- Laporan mahasiswa memuat identitas NIM/program studi/instansi dan blok tanda tangan “Disusun oleh”.
+- **Kop surat** di kepala laporan: memakai gambar resmi `web/public/Kopsurat.png` (tersedia di `/Kopsurat.png`), dengan fallback teks instansi induk + nama sekolah + alamat + kontak + kode satker. Gambar yang sama disematkan ke DOCX; path gambar dapat diubah dari form laporan.
+- Konfigurasi: periode, gedung/ruang, identitas sekolah, kop surat, kota, dan penandatangan (Kepala Madrasah, Admin BMN, Dosen Pembimbing).
+- Halaman siap **cetak/PDF A4** (kop surat, cover, lembar pengesahan, ringkasan eksekutif, ruang lingkup & metodologi, rekap gedung/ruang, temuan, kontribusi mahasiswa, log, kesimpulan).
+- Tombol **Export DOCX** menghasilkan file Word resmi dengan kop surat dan tanda tangan. Endpoint: `GET /api/report/export`.
 
 ### Endpoint baru
 ```text
@@ -134,9 +137,11 @@ GET  /api/logs
 GET  /api/monitoring/progress
 GET  /api/admin/grup
 POST /api/admin/grup/bulk-verify
-GET  /api/report/summary
-GET  /api/report/export
+GET  /api/report/summary?userId=<uuid>
+GET  /api/report/export?userId=<uuid>
 ```
+
+`userId` hanya berlaku untuk ADMIN/SUPERADMIN; MAHASISWA selalu diarahkan ke laporan sendiri oleh server.
 
 ## 9. Health & smoke test
 
@@ -148,7 +153,13 @@ npm run smoke
 # butuh SEED_SUPERADMIN_EMAIL/PASSWORD di .env; opsional SMOKE_KODE_REGISTER
 ```
 
-## 10. Catatan operasional
+## 10. Aset kop surat
+
+- Simpan gambar kop resmi di `web/public/Kopsurat.png` (otomatis ikut `vite build` ke `dist/web/Kopsurat.png`).
+- Laporan HTML/PDF menampilkan `/Kopsurat.png`; export DOCX menyematkan gambar yang sama dengan lebar 640 px.
+- Jika gambar tidak ditemukan saat export DOCX, laporan memakai kop teks cadangan dari isian form (instansi induk, sekolah, alamat, kontak, kode satker).
+
+## 11. Catatan operasional
 
 - `app.set("trust proxy", 1)` dan `listen(port, "0.0.0.0")` wajib di platform.
 - SPA fallback memakai regex; `/api/*` yang tidak ada mengembalikan JSON 404.

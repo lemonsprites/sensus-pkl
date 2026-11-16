@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, FileText, RefreshCw, Users, Boxes } from "lucide-react";
+import { Link } from "react-router-dom";
 
+import { useAuth } from "@/auth/auth-context";
 import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +31,8 @@ function dateEnd(value: string): string | undefined {
 }
 
 export default function MonitoringPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
   const [data, setData] = useState<MonitoringResponse | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -96,6 +100,16 @@ export default function MonitoringPage() {
       sortValue: (row) => row.lastActivityAt ?? "",
       className: "whitespace-nowrap text-xs",
       cell: (row) => formatDate(row.lastActivityAt),
+    },
+    {
+      key: "laporan",
+      header: "",
+      cell: (row) =>
+        isAdmin && row.role === "MAHASISWA" ? (
+          <Button asChild size="sm" variant="outline">
+            <Link to={`/laporan?userId=${row.id}`}>Laporan</Link>
+          </Button>
+        ) : null,
     },
   ];
 

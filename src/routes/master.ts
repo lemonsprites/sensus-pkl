@@ -218,7 +218,6 @@ masterRouter.post(
 
 masterRouter.get(
   "/report/summary",
-  requireRole("ADMIN", "SUPERADMIN"),
   validate({ query: reportQuerySchema }),
   async (req, res) => {
     const query = req.validated?.query as ReportQuery;
@@ -228,7 +227,6 @@ masterRouter.get(
 
 masterRouter.get(
   "/report/export",
-  requireRole("ADMIN", "SUPERADMIN"),
   validate({ query: reportExportQuerySchema }),
   async (req, res) => {
     const query = req.validated?.query as ReportExportQuery;

@@ -5,6 +5,11 @@ export const reportQuerySchema = z.object({
   to: z.string().datetime().optional(),
   buildingId: z.string().uuid().optional(),
   roomId: z.string().uuid().optional(),
+  /// ADMIN/SUPERADMIN dapat membuat laporan untuk user tertentu.
+  userId: z.string().uuid().optional(),
+  kementerian: z.string().trim().max(160).optional(),
+  kontak: z.string().trim().max(240).optional(),
+  kopImageUrl: z.string().trim().max(500).optional(),
   sekolah: z.string().trim().max(160).optional(),
   alamat: z.string().trim().max(240).optional(),
   kota: z.string().trim().max(80).optional(),

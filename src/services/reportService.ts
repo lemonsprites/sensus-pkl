@@ -3,6 +3,7 @@ import type { Kondisi, SensusStatus } from "../generated/prisma/enums.js";
 import { config } from "../lib/config.js";
 import { prisma } from "../lib/prisma.js";
 import type { ReportQuery } from "../schemas/report.js";
+import { ApiError } from "../utils/apiError.js";
 import type { Actor } from "./userService.js";
 
 function emptyConditions(): Record<Kondisi, number> {
@@ -14,6 +15,20 @@ function emptyStatus(): Record<SensusStatus, number> {
 }
 
 export async function getReportData(actor: Actor, query: ReportQuery) {
+  // MAHASISWA hanya boleh membuat laporan dirinya sendiri. ADMIN/SUPERADMIN
+  // dapat memilih user lewat query userId atau melihat laporan seluruh sekolah.
+  const subjectId = actor.role === "MAHASISWA" ? actor.id : query.userId;
+  const subject = subjectId
+    ? await prisma.user.findUnique({
+        where: { id: subjectId },
+        select: {
+          id: true, nama: true, nim: true, programStudi: true, instansi: true,
+          role: true, isActive: true,
+        },
+      })
+    : null;
+  if (subjectId && !subject) throw ApiError.notFound("Mahasiswa tidak ditemukan");
+
   const range: { gte?: Date; lte?: Date } | undefined =
     query.from || query.to
       ? {
@@ -24,6 +39,7 @@ export async function getReportData(actor: Actor, query: ReportQuery) {
 
   const groupWhere: Prisma.SensusGrupWhereInput = {
     ...(range ? { createdAt: range } : {}),
+    ...(subjectId ? { createdById: subjectId } : {}),
     ...(query.roomId
       ? { ruangId: query.roomId }
       : query.buildingId
@@ -65,6 +81,7 @@ export async function getReportData(actor: Actor, query: ReportQuery) {
     }),
     prisma.sensus.count({
       where: {
+        ...(subjectId ? { grup: { createdById: subjectId } } : {}),
         ...(query.roomId
           ? { ruangId: query.roomId }
           : query.buildingId
@@ -74,6 +91,7 @@ export async function getReportData(actor: Actor, query: ReportQuery) {
     }),
     prisma.sensusDokumen.count({
       where: {
+        ...(subjectId ? { grup: { createdById: subjectId } } : {}),
         ...(query.roomId
           ? { grup: { ruangId: query.roomId } }
           : query.buildingId
@@ -83,7 +101,10 @@ export async function getReportData(actor: Actor, query: ReportQuery) {
     }),
     query.includeLog === "true"
       ? prisma.activityLog.findMany({
-          where: { ...(range ? { createdAt: range } : {}) },
+          where: {
+            ...(subjectId ? { actorId: subjectId } : {}),
+            ...(range ? { createdAt: range } : {}),
+          },
           select: {
             id: true, actorNama: true, action: true, entityType: true,
             entityId: true, summary: true, createdAt: true,
@@ -187,11 +208,22 @@ export async function getReportData(actor: Actor, query: ReportQuery) {
       generatedAt: new Date().toISOString(),
       generatedBy: { id: actor.id, role: actor.role },
       periode: { from: query.from ?? null, to: query.to ?? null },
+      kementerian: query.kementerian ?? "KEMENTERIAN AGAMA REPUBLIK INDONESIA",
       sekolah: query.sekolah ?? "",
       alamat: query.alamat ?? "",
       kota: query.kota ?? "",
+      kontak: query.kontak ?? "",
+      kopImageUrl: query.kopImageUrl ?? "/Kopsurat.png",
       satker: config.SATKER_KODE ?? null,
+      subject: subject
+        ? {
+            id: subject.id, nama: subject.nama, nim: subject.nim,
+            programStudi: subject.programStudi, instansi: subject.instansi,
+            role: subject.role, isActive: subject.isActive,
+          }
+        : null,
       scope: {
+        userId: subjectId ?? null,
         buildingId: query.buildingId ?? null,
         roomId: query.roomId ?? null,
         gedung: [...buildingMap.values()].map((row) => row.nama),

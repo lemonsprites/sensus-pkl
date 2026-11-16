@@ -86,6 +86,17 @@ export function AppLayout() {
               <History className="size-4" /> Log
             </NavLink>
             <NavLink
+              to="/laporan"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                  isActive && "bg-muted font-medium",
+                )
+              }
+            >
+              <FileText className="size-4" /> Laporan
+            </NavLink>
+            <NavLink
               to="/profil"
               className={({ isActive }) =>
                 cn(
@@ -130,17 +141,6 @@ export function AppLayout() {
                   }
                 >
                   <CheckCheck className="size-4" /> Validasi
-                </NavLink>
-                <NavLink
-                  to="/laporan"
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                      isActive && "bg-muted font-medium",
-                    )
-                  }
-                >
-                  <FileText className="size-4" /> Laporan
                 </NavLink>
                 <NavLink
                   to="/users"

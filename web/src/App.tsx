@@ -32,6 +32,7 @@ export default function App() {
               <Route path="/scan" element={<ScanPage />} />
               <Route path="/monitoring" element={<MonitoringPage />} />
               <Route path="/log" element={<LogPage />} />
+              <Route path="/laporan" element={<ReportPage />} />
               <Route path="/profil" element={<ProfilPage />} />
 
               <Route element={<ProtectedRoute roles={["ADMIN", "SUPERADMIN"]} />}>
@@ -41,7 +42,6 @@ export default function App() {
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/admin/validasi" element={<AdminValidationPage />} />
                 <Route path="/admin/monitoring" element={<MonitoringPage />} />
-                <Route path="/laporan" element={<ReportPage />} />
               </Route>
             </Route>
           </Route>

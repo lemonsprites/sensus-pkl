@@ -1,8 +1,13 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   Footer,
   HeadingLevel,
+  ImageRun,
   PageBreak,
   PageNumber,
   Packer,
@@ -78,6 +83,56 @@ function table(headers: string[], rows: string[][]) {
   });
 }
 
+async function loadKopImage(url: string): Promise<Buffer | null> {
+  if (!url || url !== "/Kopsurat.png") return null;
+  const candidates = [
+    path.join(process.cwd(), "web/public/Kopsurat.png"),
+    path.join(process.cwd(), "dist/web/Kopsurat.png"),
+    path.join(process.cwd(), "public/Kopsurat.png"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      return await readFile(candidate);
+    } catch {
+      // Coba lokasi berikutnya; deployment bisa hanya membawa dist/web.
+    }
+  }
+  return null;
+}
+
+function kopSurat(meta: ReportData["meta"]): Paragraph[] {
+  return [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 40 },
+      children: [new TextRun({ text: meta.kementerian, bold: true, font: FONT, size: 22 })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 40 },
+      children: [new TextRun({ text: meta.sekolah || "NAMA SATUAN KERJA", bold: true, font: FONT, size: 32 })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 20 },
+      children: [new TextRun({ text: meta.alamat || "Alamat satuan kerja", font: FONT, size: 20 })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 20 },
+      children: [new TextRun({ text: meta.kontak || meta.kota || "-", font: FONT, size: 20 })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240 },
+      border: {
+        bottom: { style: BorderStyle.DOUBLE, size: 8, color: "000000", space: 4 },
+      },
+      children: [new TextRun({ text: `Kode Satker: ${meta.satker || "-"}`, font: FONT, size: 18 })],
+    }),
+  ];
+}
+
 function signatureBlock(data: ReportData) {
   const { meta } = data;
   const row = (left: string, right: string) =>
@@ -99,7 +154,16 @@ function signatureBlock(data: ReportData) {
       row("Mengetahui,\nKepala Madrasah", "Admin BMN"),
       new TableRow({
         children: [
-          cell("", false),
+          new TableCell({
+            children: meta.subject
+              ? [
+                  p("Disusun oleh,", { center: true }),
+                  p(`${meta.subject.nama}${meta.subject.nim ? ` / NIM ${meta.subject.nim}` : ""}`, { center: true }),
+                  p("", { spacing: 360 }),
+                  p("..............................", { center: true }),
+                ]
+              : [p("", { center: true })],
+          }),
           new TableCell({
             children: [
               p(`${meta.kota || "...................."}, ${new Date(meta.generatedAt).toLocaleDateString("id-ID")}`, { center: true }),
@@ -120,11 +184,27 @@ export async function buildReportDocx(data: ReportData): Promise<Buffer> {
     meta.periode.to ? new Date(meta.periode.to).toLocaleDateString("id-ID") : "sekarang"
   }`;
   const children: (Paragraph | Table)[] = [];
+  const kopImage = await loadKopImage(meta.kopImageUrl);
 
   children.push(
+    ...(kopImage
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 240 },
+            children: [
+              new ImageRun({
+                type: "png",
+                data: kopImage,
+                transformation: { width: 640, height: 141 },
+              }),
+            ],
+          }),
+        ]
+      : kopSurat(meta)),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 1800, after: 240 },
+      spacing: { before: 600, after: 240 },
       children: [new TextRun({ text: "LAPORAN SENSUS FISIK", bold: true, font: FONT, size: 40 })],
     }),
     new Paragraph({
@@ -135,6 +215,16 @@ export async function buildReportDocx(data: ReportData): Promise<Buffer> {
     p(meta.sekolah || "Nama Satuan Kerja", { center: true, size: 28 }),
     p(meta.alamat || "Alamat satuan kerja", { center: true, size: 22 }),
     p("", { spacing: 1200 }),
+    ...(meta.subject
+      ? [
+          p(
+            `Disusun oleh: ${meta.subject.nama}${meta.subject.nim ? ` / NIM ${meta.subject.nim}` : ""}${
+              meta.subject.programStudi ? ` / ${meta.subject.programStudi}` : ""
+            }`,
+            { center: true, size: 22 },
+          ),
+        ]
+      : []),
     p(`Periode: ${period}`, { center: true }),
     p(`Kode Satker: ${meta.satker || "-"}`, { center: true }),
     p(`Lingkup: ${meta.scope.gedung.length > 0 ? meta.scope.gedung.join(", ") : "Seluruh gedung"}`, { center: true }),

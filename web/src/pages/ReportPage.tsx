@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, Printer, RefreshCw } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
+import { useAuth } from "@/auth/auth-context";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { api, apiDownload } from "@/lib/api";
-import type { HierarkiResponse, ReportData, SensusStatus } from "@/lib/types";
+import type { HierarkiResponse, MonitoringResponse, ReportData, SensusStatus } from "@/lib/types";
 
 const KONDISI_LABEL = { BAIK: "Baik", RUSAK_RINGAN: "Rusak ringan", RUSAK_BERAT: "Rusak berat" };
 const STATUS_LABEL: Record<SensusStatus, string> = {
@@ -34,9 +37,13 @@ interface ReportForm {
   to: string;
   buildingId: string;
   roomId: string;
+  userId: string;
+  kementerian: string;
   sekolah: string;
   alamat: string;
   kota: string;
+  kontak: string;
+  kopImageUrl: string;
   kepala: string;
   adminBmn: string;
   pembimbing: string;
@@ -49,9 +56,13 @@ function buildParams(form: ReportForm): URLSearchParams {
   if (dateEnd(form.to)) params.set("to", dateEnd(form.to)!);
   if (form.buildingId) params.set("buildingId", form.buildingId);
   if (form.roomId) params.set("roomId", form.roomId);
+  if (form.userId) params.set("userId", form.userId);
+  if (form.kementerian) params.set("kementerian", form.kementerian);
   if (form.sekolah) params.set("sekolah", form.sekolah);
   if (form.alamat) params.set("alamat", form.alamat);
   if (form.kota) params.set("kota", form.kota);
+  if (form.kontak) params.set("kontak", form.kontak);
+  if (form.kopImageUrl) params.set("kopImageUrl", form.kopImageUrl);
   if (form.kepala) params.set("kepala", form.kepala);
   if (form.adminBmn) params.set("adminBmn", form.adminBmn);
   if (form.pembimbing) params.set("pembimbing", form.pembimbing);
@@ -60,15 +71,22 @@ function buildParams(form: ReportForm): URLSearchParams {
 }
 
 export default function ReportPage() {
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const isAdmin = user?.role === "ADMIN" || user?.role === "SUPERADMIN";
+
   const [hierarchy, setHierarchy] = useState<HierarkiResponse | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
+  const [students, setStudents] = useState<MonitoringResponse["mahasiswa"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
 
   const [form, setForm] = useState<ReportForm>({
     from: "", to: "", buildingId: "", roomId: "",
-    sekolah: "", alamat: "", kota: "",
+    userId: searchParams.get("userId") ?? "",
+    kementerian: "KEMENTERIAN AGAMA REPUBLIK INDONESIA",
+    sekolah: "", alamat: "", kota: "", kontak: "", kopImageUrl: "/Kopsurat.png",
     kepala: "", adminBmn: "", pembimbing: "",
     includeLog: "true",
   });
@@ -97,6 +115,19 @@ export default function ReportPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    void api<MonitoringResponse>("/monitoring/progress")
+      .then((data) => {
+        if (alive) setStudents(data.mahasiswa.filter((row) => row.role === "MAHASISWA"));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin]);
 
   const rooms = useMemo(() => {
     if (!hierarchy) return [];
@@ -127,9 +158,14 @@ export default function ReportPage() {
     <div className="space-y-5">
       <div className="no-print flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Laporan Resmi</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold">{isAdmin ? "Laporan Resmi" : "Laporan Saya"}</h1>
+            {!isAdmin && <Badge variant="secondary">Mahasiswa</Badge>}
+          </div>
           <p className="text-sm text-muted-foreground">
-            Susun laporan sensus untuk lampiran PKL: ringkasan, rekap ruang, temuan, kontribusi, dan pengesahan.
+            {isAdmin
+              ? "Laporan seluruh sekolah atau per mahasiswa, siap cetak dengan kop surat."
+              : "Laporan kontribusi sensus Anda, siap dicetak dan dijadikan lampiran PKL."}
           </p>
         </div>
         <div className="flex gap-2">
@@ -150,6 +186,19 @@ export default function ReportPage() {
       <Card className="no-print">
         <CardHeader><CardTitle className="text-base">Konfigurasi laporan</CardTitle></CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {isAdmin && (
+            <div className="space-y-2">
+              <Label>Mahasiswa</Label>
+              <Select value={form.userId} onChange={(e) => setForm({ ...form, userId: e.target.value })}>
+                <option value="">Semua mahasiswa</option>
+                {students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.nama}{student.nim ? ` — ${student.nim}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div className="space-y-2"><Label>Dari</Label><Input type="date" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} /></div>
           <div className="space-y-2"><Label>Sampai</Label><Input type="date" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} /></div>
           <div className="space-y-2">
@@ -166,9 +215,12 @@ export default function ReportPage() {
               {rooms.map((room) => <option key={room.id} value={room.id}>{room.nama} ({room.kode})</option>)}
             </Select>
           </div>
+          <div className="space-y-2"><Label>Instansi induk (kop)</Label><Input value={form.kementerian} onChange={(e) => setForm({ ...form, kementerian: e.target.value })} /></div>
           <div className="space-y-2"><Label>Nama sekolah</Label><Input value={form.sekolah} onChange={(e) => setForm({ ...form, sekolah: e.target.value })} placeholder="mis. MTsN 1 ..." /></div>
           <div className="space-y-2"><Label>Alamat</Label><Input value={form.alamat} onChange={(e) => setForm({ ...form, alamat: e.target.value })} /></div>
           <div className="space-y-2"><Label>Kota</Label><Input value={form.kota} onChange={(e) => setForm({ ...form, kota: e.target.value })} /></div>
+          <div className="space-y-2"><Label>Telepon / email / website</Label><Input value={form.kontak} onChange={(e) => setForm({ ...form, kontak: e.target.value })} placeholder="(021) ... · email@sekolah.sch.id" /></div>
+          <div className="space-y-2"><Label>Gambar kop surat</Label><Input value={form.kopImageUrl} onChange={(e) => setForm({ ...form, kopImageUrl: e.target.value })} placeholder="/Kopsurat.png" /></div>
           <div className="space-y-2">
             <Label>Sertakan log</Label>
             <Select value={form.includeLog} onChange={(e) => setForm({ ...form, includeLog: e.target.value })}>
@@ -185,6 +237,34 @@ export default function ReportPage() {
 
       {report && (
         <div className="print-area rounded-xl border bg-white p-6 text-sm text-black shadow-sm">
+          {report.meta.kopImageUrl ? (
+            <img
+              src={report.meta.kopImageUrl}
+              alt="Kop surat satuan kerja"
+              className="mb-6 w-full object-contain"
+            />
+          ) : (
+            <div className="mb-6 border-b-4 border-double border-black pb-3">
+              <div className="flex items-center gap-4">
+                <div className="h-16 w-16 shrink-0" />
+                <div className="min-w-0 flex-1 text-center">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide">
+                    {report.meta.kementerian || "KEMENTERIAN AGAMA REPUBLIK INDONESIA"}
+                  </div>
+                  <div className="text-xl font-bold uppercase leading-tight">
+                    {report.meta.sekolah || "Nama Satuan Kerja"}
+                  </div>
+                  <div className="text-xs">{report.meta.alamat || "Alamat satuan kerja"}</div>
+                  <div className="text-xs">
+                    {[report.meta.kontak, report.meta.kota].filter(Boolean).join(" · ") || "Kontak satuan kerja"}
+                  </div>
+                  <div className="mt-0.5 text-[10px]">Kode Satker: {report.meta.satker ?? "—"}</div>
+                </div>
+                <div className="h-16 w-16 shrink-0" />
+              </div>
+            </div>
+          )}
+
           <div className="report-page border-b pb-8">
             <div className="mb-10 text-center">
               <div className="text-xs uppercase tracking-widest">Laporan Sensus Fisik</div>
@@ -198,6 +278,14 @@ export default function ReportPage() {
               <div className="mt-1 text-xs">
                 Lingkup: {report.meta.scope.gedung.length > 0 ? report.meta.scope.gedung.join(", ") : "Seluruh gedung"}
               </div>
+              {report.meta.subject && (
+                <div className="mx-auto mt-4 inline-block border px-4 py-2 text-left text-xs">
+                  <div className="font-semibold uppercase tracking-wide">Disusun oleh</div>
+                  <div>{report.meta.subject.nama}</div>
+                  <div>NIM {report.meta.subject.nim ?? "—"} · {report.meta.subject.programStudi ?? "—"}</div>
+                  <div>{report.meta.subject.instansi ?? ""}</div>
+                </div>
+              )}
             </div>
             <div className="mx-auto max-w-lg border p-5 text-center">
               <div className="font-semibold uppercase">Lembar Pengesahan</div>
@@ -289,7 +377,14 @@ export default function ReportPage() {
             <div className="mt-10 grid grid-cols-2 gap-10 text-center text-xs">
               <div><div>Mengetahui,<br />Kepala Madrasah</div><div className="h-20" /><div className="border-t">{report.meta.signatures.kepala || ".............................."}</div></div>
               <div><div>{report.meta.kota || "...................."}, {new Date(report.meta.generatedAt).toLocaleDateString("id-ID")}<br />Admin BMN</div><div className="h-20" /><div className="border-t">{report.meta.signatures.adminBmn || ".............................."}</div></div>
-              <div /><div><div>Dosen Pembimbing PKL</div><div className="h-20" /><div className="border-t">{report.meta.signatures.pembimbing || ".............................."}</div></div>
+              {report.meta.subject ? (
+                <div>
+                  <div>Disusun oleh,<br />{report.meta.subject.nama}</div>
+                  <div className="h-20" />
+                  <div className="border-t">NIM {report.meta.subject.nim ?? ".............................."}</div>
+                </div>
+              ) : <div />}
+              <div><div>Dosen Pembimbing PKL</div><div className="h-20" /><div className="border-t">{report.meta.signatures.pembimbing || ".............................."}</div></div>
             </div>
             <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground"><FileText className="size-3" /> Dokumen ini dihasilkan dari data aktual aplikasi.</div>
           </div>

@@ -405,11 +405,23 @@ export interface ReportData {
     generatedAt: string;
     generatedBy: { id: string; role: Role };
     periode: { from: string | null; to: string | null };
+    kementerian: string;
     sekolah: string;
     alamat: string;
     kota: string;
+    kontak: string;
+    kopImageUrl: string;
     satker: string | null;
-    scope: { buildingId: string | null; roomId: string | null; gedung: string[] };
+    subject: {
+      id: string; nama: string; nim: string | null; programStudi: string | null;
+      instansi: string | null; role: Role; isActive: boolean;
+    } | null;
+    scope: {
+      userId: string | null;
+      buildingId: string | null;
+      roomId: string | null;
+      gedung: string[];
+    };
     signatures: { kepala: string; adminBmn: string; pembimbing: string };
   };
   summary: {
