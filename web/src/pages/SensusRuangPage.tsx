@@ -332,7 +332,7 @@ export default function SensusRuangPage() {
           {canVerify && (group.status === "VALIDATED" || group.status === "DOCS_COMPLETE") && (
             <Button size="icon" variant="ghost" title="Tolak" onClick={() => void rejectGroup(group)}><XCircle /></Button>
           )}
-          {group.status !== "VALIDATED" && (
+          {group.status !== "VALIDATED" && (canVerify || group.createdBy.id === user?.id) && (
             <Button size="icon" variant="ghost" title="Hapus grup" onClick={() => void deleteGroup(group)}><Trash2 /></Button>
           )}
         </div>
@@ -513,7 +513,9 @@ export default function SensusRuangPage() {
                     )}
                     <div className="mt-2 flex items-center justify-between gap-2 text-xs">
                       <span className="text-muted-foreground">{doc.jenis} · {doc.uploadedBy.nama}</span>
-                      <Button size="icon" variant="ghost" onClick={() => void deleteDoc(doc)} aria-label="Hapus dokumen"><Trash2 /></Button>
+                      {(canVerify || doc.uploadedBy.id === user?.id) && (
+                        <Button size="icon" variant="ghost" onClick={() => void deleteDoc(doc)} aria-label="Hapus dokumen"><Trash2 /></Button>
+                      )}
                     </div>
                   </div>
                 ))}

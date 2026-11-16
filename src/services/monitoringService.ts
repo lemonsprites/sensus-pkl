@@ -87,7 +87,11 @@ export async function getProgress(query: MonitoringQuery) {
     }),
     prisma.activityLog.groupBy({
       by: ["actorId"],
-      where: { actorId: { not: null }, ...(range ? { createdAt: range } : {}) },
+      where: {
+        actorId: { not: null },
+        action: { notIn: ["LOGIN", "LOGOUT"] },
+        ...(range ? { createdAt: range } : {}),
+      },
       _count: { _all: true },
       _max: { createdAt: true },
     }),
