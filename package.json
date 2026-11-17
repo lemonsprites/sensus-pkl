@@ -23,7 +23,8 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
     "seed:ruang": "tsx prisma/seedRuang.ts",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "deploy:vm101": "bash scripts/deploy-vm101.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

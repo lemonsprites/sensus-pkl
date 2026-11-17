@@ -161,7 +161,83 @@ npm run smoke
 - Laporan HTML/PDF menampilkan `/Kopsurat.png`; export DOCX menyematkan gambar yang sama dengan lebar 640 px.
 - Jika gambar tidak ditemukan saat export DOCX, laporan memakai kop teks cadangan dari isian form (instansi induk, sekolah, alamat, kontak, kode satker).
 
-## 11. Catatan operasional
+## 11. Deploy lokal via rsync + SSH vm101
+
+Tidak memakai GitHub Actions/GitLab Runner. Script menyalin source dari laptop ke VM, lalu build dan restart PM2 di VM.
+
+### Persiapan sekali
+```bash
+# dari root repo lokal
+cp scripts/deploy-vm101.env.example scripts/deploy-vm101.env
+# edit SSH_HOST, REMOTE_DIR, PM2_NAME, APP_PORT, REMOTE_ENV_FILE, DOMAIN
+
+# SSH alias vm101 diasumsikan sudah ada di ~/.ssh/config
+ssh vm101 'mkdir -p /home/matsa/sensus-pkl'
+```
+
+Remote `.env` wajib dibuat sekali (script tidak mengirimkannya secara default):
+```bash
+scp .env.example vm101:/home/matsa/sensus-pkl/.env
+ssh vm101 'nano /home/matsa/sensus-pkl/.env'
+# isi DATABASE_URL, REDIS_URL, MINIO_*, JWT_SECRET, PORT, dll.
+```
+
+Jika memilih `/var/www/sensus-pkl`:
+```bash
+ssh vm101 'sudo mkdir -p /var/www/sensus-pkl && sudo chown matsa:matsa /var/www/sensus-pkl'
+```
+Sesuaikan `REMOTE_DIR` dan `REMOTE_ENV_FILE` di `scripts/deploy-vm101.env`.
+
+Nginx satu kali:
+```bash
+# salin deploy/nginx-sensus.conf.example, sesuaikan domain/port
+ssh vm101 'sudo nano /etc/nginx/sites-available/sensus.conf'
+ssh vm101 'sudo ln -s /etc/nginx/sites-available/sensus.conf /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx'
+# TLS:
+ssh vm101 'sudo certbot --nginx -d sensus.matsanesacis.sch.id'
+```
+
+### Deploy
+```bash
+npm run deploy:vm101 -- --yes
+
+# atau dengan konfirmasi
+npm run deploy:vm101
+```
+
+Alur script:
+1. cek koneksi SSH dan file `.env` remote,
+2. `rsync` source (tanpa `.env`, `node_modules`, `dist`, `.git`, data lokal),
+3. `npm ci`,
+4. `npm run build`,
+5. `npm run prisma:deploy`,
+6. `pm2 start/restart sensus-pkl`,
+7. `pm2 save` + health check `http://127.0.0.1:3000/api/health`.
+
+### Opsi
+```bash
+npm run deploy:vm101 -- --dry-run --allow-dirty
+npm run deploy:vm101 -- --skip-install
+npm run deploy:vm101 -- --skip-build
+npm run deploy:vm101 -- --skip-migrate
+npm run deploy:vm101 -- --skip-restart
+npm run deploy:vm101 -- --sync-env   # backup .env remote lalu unggah .env lokal
+```
+
+- `--dry-run` tidak mengubah remote.
+- `--sync-env` hanya jika sengaja ingin menimpa `.env` remote; backup `.env.bak.<timestamp>` dibuat otomatis.
+- Deploy default menolak jika ada perubahan tracked yang belum di-commit; gunakan `--allow-dirty` bila perlu.
+- Jika health check gagal, script menampilkan `pm2 logs sensus-pkl --lines 80` dan keluar non-zero.
+
+### Rollback
+- Source: deploy commit sebelumnya dengan `git checkout <commit>` lalu jalankan deploy lagi.
+- Proses: `ssh vm101 'pm2 restart sensus-pkl'`.
+- Database: migration Prisma bersifat forward-only; buat backup Postgres sebelum deploy yang mengandung migration besar:
+  ```bash
+  ssh vm101 'pg_dump "$DATABASE_URL" -Fc -f ~/sensus-before-deploy.dump'
+  ```
+
+## 12. Catatan operasional
 
 - `app.set("trust proxy", 1)` dan `listen(port, "0.0.0.0")` wajib di platform.
 - SPA fallback memakai regex; `/api/*` yang tidak ada mengembalikan JSON 404.

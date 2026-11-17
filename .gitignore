@@ -16,6 +16,9 @@ src/generated/
 .env.*
 !.env.example
 
+# deploy lokal (berisi target host/path)
+scripts/deploy-vm101.env
+
 # logs
 logs
 *.log

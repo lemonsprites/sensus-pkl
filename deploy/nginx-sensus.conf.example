@@ -1,0 +1,25 @@
+# Contoh konfigurasi Nginx satu kali untuk VM101.
+# Pasang sebagai /etc/nginx/sites-available/sensus.conf, lalu symlink ke sites-enabled.
+# Ganti domain dan port sesuai scripts/deploy-vm101.env.
+
+server {
+    listen 80;
+    server_name sensus.matsanesacis.sch.id;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+    }
+}
+
+# Setelah DNS mengarah ke VM:
+# sudo ln -s /etc/nginx/sites-available/sensus.conf /etc/nginx/sites-enabled/sensus.conf
+# sudo nginx -t && sudo systemctl reload nginx
+# sudo certbot --nginx -d sensus.matsanesacis.sch.id
