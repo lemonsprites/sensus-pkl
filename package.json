@@ -24,7 +24,8 @@
     "lint": "eslint .",
     "seed:ruang": "tsx prisma/seedRuang.ts",
     "smoke": "node scripts/smoke.mjs",
-    "deploy:vm101": "bash scripts/deploy-vm101.sh"
+    "deploy:vm101": "bash scripts/deploy-vm101.sh",
+    "deploy:nginx": "bash scripts/setup-nginx-vm101.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

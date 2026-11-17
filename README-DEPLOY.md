@@ -182,13 +182,25 @@ ssh vm101 'nano /var/www/sensus-pkl/.env'
 ```
 Jika ingin mengunggah `.env` lokal secara eksplisit, gunakan `--sync-env`.
 
-Nginx satu kali:
+Nginx satu kali (butuh password sudo):
+
 ```bash
-# salin deploy/nginx-sensus.conf.example, sesuaikan domain/port
-ssh vm101 'sudo nano /etc/nginx/sites-available/sensus.conf'
-ssh vm101 'sudo ln -s /etc/nginx/sites-available/sensus.conf /etc/nginx/sites-enabled/ && sudo nginx -t && sudo systemctl reload nginx'
-# TLS:
-ssh vm101 'sudo certbot --nginx -d sensus.matsanesacis.sch.id'
+# pasang HTTP config + reload
+npm run deploy:nginx
+
+# pasang config lalu langsung certbot TLS
+npm run deploy:nginx -- --tls
+```
+
+Script memakai domain/port dari `scripts/deploy-vm101.env`, menyalin template ke
+`/etc/nginx/sites-available/sensus.conf`, membuat symlink, lalu `nginx -t` + reload.
+Jika `sites-available` belum ada atau domain belum diarahkan, script akan gagal
+dengan aman sebelum mengubah aplikasi.
+
+Verifikasi:
+```bash
+curl -fsS http://127.0.0.1:3100/api/health
+curl -fsS https://sensus.matsanesacis.sch.id/api/health
 ```
 
 ### Deploy
