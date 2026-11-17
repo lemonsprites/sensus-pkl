@@ -136,6 +136,10 @@ else
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
+  if [[ ! -d "$ROOT/node_modules" ]]; then
+    info "node_modules lokal belum ada; npm ci..."
+    (cd "$ROOT" && npm ci) || die "npm ci lokal gagal."
+  fi
   info "Build web + api di lokal..."
   (cd "$ROOT" && npm run build) || die "Build lokal gagal."
 else
