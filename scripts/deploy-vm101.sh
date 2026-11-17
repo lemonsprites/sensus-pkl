@@ -26,6 +26,8 @@ PM2_NAME="${PM2_NAME:-sensus-pkl}"
 APP_PORT="${APP_PORT:-3100}"
 REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-$REMOTE_DIR/.env}"
 DOMAIN="${DOMAIN:-sensus.matsanesacis.sch.id}"
+GATEWAY_HOST="${GATEWAY_HOST:-vps}"
+RELOAD_GATEWAY="${RELOAD_GATEWAY:-0}"
 
 DRY_RUN="${DRY_RUN:-0}"
 CONFIRM="${CONFIRM:-1}"
@@ -45,6 +47,7 @@ Opsi:
   --dry-run       Tampilkan rencana tanpa mengubah remote
   --yes, -y       Lewati konfirmasi
   --sync-env      Unggah .env lokal ke remote (backup .env lama dulu)
+  --reload-gateway Reload Nginx gateway VPS setelah deploy
   --allow-dirty   Izinkan file tracked yang belum di-commit
   --skip-install  Lewati npm ci di remote
   --skip-build    Lewati build lokal (pakai dist lokal yang sudah ada)
@@ -62,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1 ;;
     --yes|-y) CONFIRM=0 ;;
     --sync-env) SYNC_ENV=1 ;;
+    --reload-gateway) RELOAD_GATEWAY=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --skip-install) SKIP_INSTALL=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
@@ -87,6 +91,7 @@ fi
 
 info "Target: $SSH_HOST:$REMOTE_DIR (PM2 $PM2_NAME, port $APP_PORT)"
 info "Domain contoh Nginx: $DOMAIN"
+info "Gateway VPS: $GATEWAY_HOST (reload=$RELOAD_GATEWAY)"
 info "Commit lokal: $(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo 'non-git')"
 
 if [[ "$CONFIRM" == "1" && "$DRY_RUN" != "1" ]]; then
@@ -234,6 +239,12 @@ if [[ "$DRY_RUN" == "1" ]]; then
 else
   printf '%s\n' "$REMOTE_SCRIPT" | ssh -o BatchMode=yes "$SSH_HOST" \
     "env REMOTE_DIR=$(quote "$REMOTE_DIR") PM2_NAME=$(quote "$PM2_NAME") APP_PORT=$(quote "$APP_PORT") SKIP_INSTALL=$(quote "$SKIP_INSTALL") SKIP_MIGRATE=$(quote "$SKIP_MIGRATE") SKIP_RESTART=$(quote "$SKIP_RESTART") bash -s"
+fi
+
+if [[ "$RELOAD_GATEWAY" == "1" && "$DRY_RUN" != "1" ]]; then
+  info "Reload Nginx gateway $GATEWAY_HOST..."
+  ssh -o BatchMode=yes "$GATEWAY_HOST" "sudo nginx -t && sudo systemctl reload nginx" \
+    || die "App sehat, tetapi reload Nginx gateway gagal. Cek konfigurasi gateway."
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then

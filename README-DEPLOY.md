@@ -182,24 +182,43 @@ ssh vm101 'nano /var/www/sensus-pkl/.env'
 ```
 Jika ingin mengunggah `.env` lokal secara eksplisit, gunakan `--sync-env`.
 
-Nginx satu kali (butuh password sudo):
+Nginx satu kali:
+- **Gateway publik di VPS** (`vps`) meneruskan domain ke `192.168.100.252:3100`.
+- Config di vm101 hanya diperlukan jika gateway VPS mem-proxy ke Nginx vm101, bukan langsung ke port aplikasi.
 
 ```bash
-# pasang HTTP config + reload
-npm run deploy:nginx
+# pasang HTTP gateway di VPS + reload
+npm run deploy:gateway
 
-# pasang config lalu langsung certbot TLS
-npm run deploy:nginx -- --tls
+# opsional pasang config dan certbot di VPS
+npm run deploy:gateway -- --tls
 ```
 
-Script memakai domain/port dari `scripts/deploy-vm101.env`, menyalin template ke
-`/etc/nginx/sites-available/sensus.conf`, membuat symlink, lalu `nginx -t` + reload.
-Jika `sites-available` belum ada atau domain belum diarahkan, script akan gagal
-dengan aman sebelum mengubah aplikasi.
+Script gateway memakai `GATEWAY_HOST`, `UPSTREAM_HOST`, `APP_PORT`, dan `DOMAIN` dari
+`scripts/deploy-vm101.env`, menyalin template ke `/etc/nginx/sites-available/sensus.conf`
+di VPS, membuat symlink, lalu `nginx -t` + reload.
+
+Jika Nginx gateway diubah, deploy aplikasi bisa sekaligus reload gateway:
+```bash
+npm run deploy:vm101 -- --yes --reload-gateway
+```
+
+### Cloudflare
+Jika domain memakai proxy Cloudflare, setelah sertifikat origin terpasang:
+- atur **SSL/TLS mode Cloudflare → Full (strict)**;
+- jangan gunakan mode Flexible, karena origin mengarahkan HTTP ke HTTPS dan Cloudflare bisa menghasilkan loop `301`;
+- alternatif: ubah record DNS menjadi **DNS only** sampai verifikasi TLS selesai.
+
+Cek langsung ke origin:
+```bash
+curl --resolve sensus.matsanesacis.sch.id:443:38.9.47.234 \
+  https://sensus.matsanesacis.sch.id/api/health
+```
 
 Verifikasi:
 ```bash
 curl -fsS http://127.0.0.1:3100/api/health
+curl -fsS http://sensus.matsanesacis.sch.id/api/health
 curl -fsS https://sensus.matsanesacis.sch.id/api/health
 ```
 
