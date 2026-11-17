@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Deploy lokal sensus-pkl ke VM101 melalui rsync + SSH.
+# Build dijalankan di laptop; remote hanya install, migrasi, dan restart PM2.
 # Tidak memakai Git remote/CI. Rahasia .env tidak dikirim kecuali SYNC_ENV=1.
 set -Eeuo pipefail
 
@@ -20,9 +21,9 @@ fi
 
 # Default dapat dioverride lewat scripts/deploy-vm101.env atau environment.
 SSH_HOST="${SSH_HOST:-vm101}"
-REMOTE_DIR="${REMOTE_DIR:-/home/matsa/sensus-pkl}"
+REMOTE_DIR="${REMOTE_DIR:-/var/www/sensus-pkl}"
 PM2_NAME="${PM2_NAME:-sensus-pkl}"
-APP_PORT="${APP_PORT:-3000}"
+APP_PORT="${APP_PORT:-3100}"
 REMOTE_ENV_FILE="${REMOTE_ENV_FILE:-$REMOTE_DIR/.env}"
 DOMAIN="${DOMAIN:-sensus.matsanesacis.sch.id}"
 
@@ -46,7 +47,7 @@ Opsi:
   --sync-env      Unggah .env lokal ke remote (backup .env lama dulu)
   --allow-dirty   Izinkan file tracked yang belum di-commit
   --skip-install  Lewati npm ci di remote
-  --skip-build    Lewati npm run build
+  --skip-build    Lewati build lokal (pakai dist lokal yang sudah ada)
   --skip-migrate  Lewati prisma migrate deploy
   --skip-restart  Jangan restart PM2 / health check
   --help          Tampilkan bantuan
@@ -134,7 +135,16 @@ else
   info "Dry-run: melewati pengecekan file remote."
 fi
 
-info "Sinkronisasi source lokal → remote..."
+if [[ "$SKIP_BUILD" != "1" ]]; then
+  info "Build web + api di lokal..."
+  (cd "$ROOT" && npm run build) || die "Build lokal gagal."
+else
+  info "Build lokal dilewati; menggunakan dist yang sudah ada."
+fi
+[[ -f "$ROOT/dist/server/server.js" && -f "$ROOT/dist/web/index.html" ]] \
+  || die "Artifact dist/server/server.js atau dist/web/index.html tidak ditemukan. Jalankan build lokal dulu."
+
+info "Sinkronisasi source + dist lokal → remote..."
 RSYNC_ARGS=(
   -az
   --delete
@@ -142,7 +152,6 @@ RSYNC_ARGS=(
   --itemize-changes
   --exclude=.git/
   --exclude=node_modules/
-  --exclude=dist/
   --exclude=.env
   --exclude=.env.*
   --exclude=data/
@@ -179,11 +188,9 @@ else
   echo "[deploy] npm ci dilewati."
 fi
 
-if [[ "$SKIP_BUILD" != "1" ]]; then
-  echo "[deploy] build web + api..."
-  npm run build
-else
-  echo "[deploy] build dilewati."
+if [[ ! -f dist/server/server.js || ! -f dist/web/index.html ]]; then
+  echo "[deploy] artifact dist tidak lengkap" >&2
+  exit 1
 fi
 
 if [[ "$SKIP_MIGRATE" != "1" ]]; then
@@ -222,9 +229,13 @@ if [[ "$DRY_RUN" == "1" ]]; then
   printf '\n----- REMOTE SCRIPT (dry-run) -----\n%s\n----- END -----\n' "$REMOTE_SCRIPT"
 else
   printf '%s\n' "$REMOTE_SCRIPT" | ssh -o BatchMode=yes "$SSH_HOST" \
-    "env REMOTE_DIR=$(quote "$REMOTE_DIR") PM2_NAME=$(quote "$PM2_NAME") APP_PORT=$(quote "$APP_PORT") SKIP_INSTALL=$(quote "$SKIP_INSTALL") SKIP_BUILD=$(quote "$SKIP_BUILD") SKIP_MIGRATE=$(quote "$SKIP_MIGRATE") SKIP_RESTART=$(quote "$SKIP_RESTART") bash -s"
+    "env REMOTE_DIR=$(quote "$REMOTE_DIR") PM2_NAME=$(quote "$PM2_NAME") APP_PORT=$(quote "$APP_PORT") SKIP_INSTALL=$(quote "$SKIP_INSTALL") SKIP_MIGRATE=$(quote "$SKIP_MIGRATE") SKIP_RESTART=$(quote "$SKIP_RESTART") bash -s"
 fi
 
-info "Deploy selesai. Domain target: $DOMAIN"
-info "Cek: curl -fsS http://127.0.0.1:$APP_PORT/api/health (dari VM), atau https://$DOMAIN/api/health"
+if [[ "$DRY_RUN" == "1" ]]; then
+  info "Dry-run selesai; tidak ada perubahan remote."
+else
+  info "Deploy selesai. Domain target: $DOMAIN"
+  info "Cek: curl -fsS http://127.0.0.1:$APP_PORT/api/health (dari VM), atau https://$DOMAIN/api/health"
+fi
 

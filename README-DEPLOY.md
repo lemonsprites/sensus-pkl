@@ -163,7 +163,7 @@ npm run smoke
 
 ## 11. Deploy lokal via rsync + SSH vm101
 
-Tidak memakai GitHub Actions/GitLab Runner. Script menyalin source dari laptop ke VM, lalu build dan restart PM2 di VM.
+Tidak memakai GitHub Actions/GitLab Runner. Script build di laptop, lalu menyalin source + `dist` ke VM dan restart PM2 di VM.
 
 ### Persiapan sekali
 ```bash
@@ -172,21 +172,15 @@ cp scripts/deploy-vm101.env.example scripts/deploy-vm101.env
 # edit SSH_HOST, REMOTE_DIR, PM2_NAME, APP_PORT, REMOTE_ENV_FILE, DOMAIN
 
 # SSH alias vm101 diasumsikan sudah ada di ~/.ssh/config
-ssh vm101 'mkdir -p /home/matsa/sensus-pkl'
+ssh vm101 'mkdir -p /var/www/sensus-pkl'
 ```
 
-Remote `.env` wajib dibuat sekali (script tidak mengirimkannya secara default):
+Server saat ini sudah memakai `/var/www/sensus-pkl` dengan `.env` port `3100`. Script tidak mengirim `.env` secara default:
 ```bash
-scp .env.example vm101:/home/matsa/sensus-pkl/.env
-ssh vm101 'nano /home/matsa/sensus-pkl/.env'
-# isi DATABASE_URL, REDIS_URL, MINIO_*, JWT_SECRET, PORT, dll.
+ssh vm101 'nano /var/www/sensus-pkl/.env'
+# pastikan DATABASE_URL, REDIS_URL, MINIO_*, JWT_SECRET, PORT=3100, dll.
 ```
-
-Jika memilih `/var/www/sensus-pkl`:
-```bash
-ssh vm101 'sudo mkdir -p /var/www/sensus-pkl && sudo chown matsa:matsa /var/www/sensus-pkl'
-```
-Sesuaikan `REMOTE_DIR` dan `REMOTE_ENV_FILE` di `scripts/deploy-vm101.env`.
+Jika ingin mengunggah `.env` lokal secara eksplisit, gunakan `--sync-env`.
 
 Nginx satu kali:
 ```bash
@@ -207,12 +201,16 @@ npm run deploy:vm101
 
 Alur script:
 1. cek koneksi SSH dan file `.env` remote,
-2. `rsync` source (tanpa `.env`, `node_modules`, `dist`, `.git`, data lokal),
-3. `npm ci`,
-4. `npm run build`,
+2. **`npm run build` di lokal** (menghasilkan `dist/web` + `dist/server`),
+3. `rsync` source + `dist` (tanpa `.env`, `node_modules`, `.git`, data lokal),
+4. `npm ci` di remote untuk dependency runtime/migrasi,
 5. `npm run prisma:deploy`,
 6. `pm2 start/restart sensus-pkl`,
-7. `pm2 save` + health check `http://127.0.0.1:3000/api/health`.
+7. `pm2 save` + health check `http://127.0.0.1:3100/api/health`.
+
+Catatan: `dist/` lokal **wajib ada**; script akan gagal sebelum upload jika `dist/server/server.js` atau `dist/web/index.html` tidak ditemukan. `--skip-build` hanya melewati build, bukan melewati pengecekan artifact.
+
+Build tidak lagi dijalankan di remote. Opsi `--skip-build` memakai `dist` lokal yang sudah ada.
 
 ### Opsi
 ```bash
