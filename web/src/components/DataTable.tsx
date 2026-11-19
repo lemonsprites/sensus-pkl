@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Search } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,19 @@ export interface DataTableColumn<T> {
   cell: (row: T) => ReactNode;
   sortValue?: (row: T) => string | number;
   className?: string;
+  /** Sembunyikan kolom ini pada tampilan kartu mobile. */
+  mobileHidden?: boolean;
+  /** Label khusus pada tampilan kartu mobile (default: header). */
+  mobileLabel?: string;
+  /**
+   * Peran kolom pada kartu mobile:
+   * - `title`    → judul kartu
+   * - `subtitle` → teks kecil di bawah judul
+   * - `primary`  → ditampilkan menonjol sebelum daftar label
+   * - `actions`  → deretan aksi di bagian bawah kartu
+   * Default: kolom pertama yang tidak disembunyikan menjadi `title`.
+   */
+  mobilePriority?: "title" | "subtitle" | "primary" | "actions";
 }
 
 export interface DataTableProps<T> {
@@ -83,12 +96,28 @@ export function DataTable<T>({
   const totalPages = total !== undefined && limit ? Math.max(1, Math.ceil(total / limit)) : 1;
   const currentPage = page ?? 1;
 
+  // Susunan kartu untuk layar mobile.
+  const visibleColumns = columns.filter((column) => !column.mobileHidden);
+  const titleColumn =
+    visibleColumns.find((column) => column.mobilePriority === "title") ?? visibleColumns[0];
+  const subtitleColumn = visibleColumns.find((column) => column.mobilePriority === "subtitle");
+  const primaryColumns = visibleColumns.filter((column) => column.mobilePriority === "primary");
+  const actionColumns = visibleColumns.filter((column) => column.mobilePriority === "actions");
+  const fieldColumns = visibleColumns.filter(
+    (column) =>
+      column !== titleColumn &&
+      column !== subtitleColumn &&
+      !primaryColumns.includes(column) &&
+      !actionColumns.includes(column),
+  );
+  const colSpan = columns.length + (selectable ? 1 : 0);
+
   return (
     <div className="space-y-3">
       {(onSearchChange || filters) && (
         <div className="flex flex-wrap items-end gap-2">
           {onSearchChange && (
-            <div className="relative min-w-56 flex-1">
+            <div className="relative min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-56">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search ?? ""}
@@ -102,7 +131,7 @@ export function DataTable<T>({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="hidden overflow-x-auto rounded-lg border md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -131,9 +160,9 @@ export function DataTable<T>({
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableEmpty colSpan={columns.length + (selectable ? 1 : 0)}>Memuat data…</TableEmpty>
+              <TableEmpty colSpan={colSpan}>Memuat data…</TableEmpty>
             ) : sorted.length === 0 ? (
-              <TableEmpty colSpan={columns.length + (selectable ? 1 : 0)}>{emptyText}</TableEmpty>
+              <TableEmpty colSpan={colSpan}>{emptyText}</TableEmpty>
             ) : (
               sorted.map((row) => {
                 const id = getRowId(row);
@@ -160,8 +189,86 @@ export function DataTable<T>({
         </Table>
       </div>
 
+      {/* Mobile: setiap baris menjadi kartu agar tidak perlu scroll horizontal. */}
+      <div className="space-y-2 md:hidden">
+        {loading ? (
+          <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+            Memuat data…
+          </div>
+        ) : sorted.length === 0 ? (
+          <div className="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+            {emptyText}
+          </div>
+        ) : (
+          sorted.map((row) => {
+            const id = getRowId(row);
+            const selected = selectedIds.includes(id);
+            return (
+              <div
+                key={id}
+                className={cn("rounded-lg border bg-card p-3", selected && "bg-muted/50")}
+              >
+                <div className="flex items-start gap-2">
+                  {selectable && (
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 shrink-0"
+                      checked={selected}
+                      onChange={() => toggleRow(id)}
+                      aria-label={`Pilih ${id}`}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    {titleColumn && (
+                      <div className="truncate font-medium">{titleColumn.cell(row)}</div>
+                    )}
+                    {subtitleColumn && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {subtitleColumn.cell(row)}
+                      </div>
+                    )}
+                    {primaryColumns.length > 0 && (
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        {primaryColumns.map((column) => (
+                          <div key={column.key} className={column.className}>
+                            {column.cell(row)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {fieldColumns.length > 0 && (
+                  <dl className="mt-2 grid grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)] gap-x-2 gap-y-1 border-t pt-2 text-xs">
+                    {fieldColumns.map((column) => (
+                      <Fragment key={column.key}>
+                        <dt className="text-muted-foreground">
+                          {column.mobileLabel ?? column.header}
+                        </dt>
+                        <dd className={cn("min-w-0 break-words", column.className)}>
+                          {column.cell(row)}
+                        </dd>
+                      </Fragment>
+                    ))}
+                  </dl>
+                )}
+                {actionColumns.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1 border-t pt-2">
+                    {actionColumns.map((column) => (
+                      <div key={column.key} className={cn("min-w-0", column.className)}>
+                        {column.cell(row)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {onPageChange && total !== undefined && limit !== undefined && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
           <span className="text-muted-foreground">
             {total.toLocaleString("id-ID")} baris · halaman {currentPage} dari {totalPages}
           </span>

@@ -60,7 +60,22 @@
     color: var(--foreground);
     font-family: system-ui, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
+
+  html {
+    scrollbar-gutter: stable;
+  }
+}
+
+/* Jarak aman untuk perangkat dengan notch / home indicator. */
+@utility pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+/* Ruang bawah agar konten tidak tertutup bottom navigation. */
+@utility pb-nav {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
 }
 
 @media print {
@@ -105,5 +120,10 @@
   .print-area tr {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  /* Label tetap 2 kolom saat dicetak walau di layar mobile hanya 1 kolom. */
+  .print-area .label-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }

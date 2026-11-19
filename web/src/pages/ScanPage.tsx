@@ -57,20 +57,22 @@ export default function ScanPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-            <div className="min-w-64 flex-1 space-y-2">
+            <div className="min-w-0 flex-1 basis-full space-y-2 sm:basis-auto">
               <Label htmlFor="scan-code">Kode Register</Label>
               <div className="relative">
-                <QrCode className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <QrCode className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="scan-code"
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                   placeholder="E232FE0C50A925B1E0531261F20AD862"
                   className="pl-9 font-mono"
+                  autoComplete="off"
+                  autoCapitalize="characters"
                 />
               </div>
             </div>
-            <Button type="submit" disabled={loading || !code.trim()}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={loading || !code.trim()}>
               {loading ? <Loader2 className="animate-spin" /> : <Search />}
               Cek
             </Button>

@@ -92,12 +92,13 @@ export default function HierarchyPage() {
             aset yang belum punya lokasi di SIMAN.
           </p>
         </div>
-        <div className="w-full max-w-xs space-y-2">
+        <div className="w-full space-y-2 sm:w-auto sm:max-w-xs">
           <Label htmlFor="cari-ruang">Cari ruang</Label>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="cari-ruang"
+              type="search"
               value={q}
               onChange={(event) => setQ(event.target.value)}
               placeholder="kode / nama ruang…"
@@ -170,7 +171,7 @@ export default function HierarchyPage() {
                           <Link
                             key={room.id}
                             to={`/sensus/${room.id}`}
-                            className="group rounded-lg border p-3 transition-colors hover:border-primary/50 hover:bg-muted/40"
+                            className="group flex min-h-11 flex-col justify-center rounded-lg border p-3 transition-colors hover:border-primary/50 hover:bg-muted/40 active:bg-muted/60"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">

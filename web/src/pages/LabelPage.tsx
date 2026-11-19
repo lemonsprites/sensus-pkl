@@ -2,22 +2,13 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Printer, Search, Stamp } from "lucide-react";
 import QRCode from "qrcode";
 
+import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableEmpty,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import type { LabelEligibleResponse, LabelItem, PrintLabelResponse } from "@/lib/types";
 
@@ -56,29 +47,6 @@ export default function LabelPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-
-  const toggle = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const togglePage = () => {
-    if (!data) return;
-    const ids = data.items.map((item) => item.sensusId);
-    const allSelected = ids.every((id) => selected.has(id));
-    setSelected((current) => {
-      const next = new Set(current);
-      for (const id of ids) {
-        if (allSelected) next.delete(id);
-        else next.add(id);
-      }
-      return next;
-    });
-  };
 
   const handlePrint = async () => {
     const ids = [...selected];
@@ -128,8 +96,44 @@ export default function LabelPage() {
     }
   };
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
-  const allPageSelected = data?.items.every((item) => selected.has(item.sensusId)) ?? false;
+  const labelColumns: DataTableColumn<LabelItem>[] = [
+    {
+      key: "nama",
+      header: "Aset",
+      mobilePriority: "title",
+      sortValue: (item) => item.nama,
+      cell: (item) => (
+        <span className="block max-w-64 truncate font-medium">{item.nama}</span>
+      ),
+    },
+    {
+      key: "nup",
+      header: "NUP / Kode Barang",
+      mobileLabel: "NUP / kode barang",
+      cell: (item) => (
+        <div className="text-xs">
+          NUP {item.kodeSiman ?? "—"}
+          <div className="text-muted-foreground">{item.kodeBarang ?? "—"}</div>
+        </div>
+      ),
+    },
+    {
+      key: "ruang",
+      header: "Ruang",
+      cell: (item) => (
+        <div className="text-xs">
+          {item.ruang ?? "—"}
+          <div className="text-muted-foreground">{item.gedung ?? "—"}</div>
+        </div>
+      ),
+    },
+    {
+      key: "kodeRegister",
+      header: "Kode Register (QR)",
+      mobileLabel: "Kode register",
+      cell: (item) => <span className="font-mono text-xs break-all">{item.kodeRegister ?? "—"}</span>,
+    },
+  ];
 
   return (
     <div className="space-y-5">
@@ -159,19 +163,20 @@ export default function LabelPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <form
-              className="flex flex-wrap items-end gap-2"
+              className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
               onSubmit={(event: FormEvent) => {
                 event.preventDefault();
                 setQ(qInput.trim());
                 setPage(1);
               }}
             >
-              <div className="min-w-56 flex-1 space-y-2">
+              <div className="min-w-0 flex-1 space-y-2">
                 <Label htmlFor="label-q">Cari</Label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="label-q"
+                    type="search"
                     value={qInput}
                     onChange={(event) => setQInput(event.target.value)}
                     placeholder="nama / kode register / NUP"
@@ -179,77 +184,33 @@ export default function LabelPage() {
                   />
                 </div>
               </div>
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" className="w-full sm:w-auto">
                 <Search /> Cari
               </Button>
-              <Button type="button" onClick={() => void handlePrint()} disabled={printing || selected.size === 0}>
+              <Button type="button" className="w-full sm:w-auto" onClick={() => void handlePrint()} disabled={printing || selected.size === 0}>
                 <Printer /> Cetak ({selected.size})
               </Button>
               {printed && (
-                <Button type="button" variant="outline" onClick={() => void handleApply()}>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void handleApply()}>
                   <Stamp /> Tandai Ditempel
                 </Button>
               )}
             </form>
 
-            {loading ? (
-              <Loader label="Memuat label…" />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <input type="checkbox" checked={allPageSelected} onChange={togglePage} />
-                    </TableHead>
-                    <TableHead>Aset</TableHead>
-                    <TableHead>NUP / Kode Barang</TableHead>
-                    <TableHead>Ruang</TableHead>
-                    <TableHead>Kode Register (QR)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data && data.items.length > 0 ? (
-                    data.items.map((item) => (
-                      <TableRow key={item.sensusId}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(item.sensusId)}
-                            onChange={() => toggle(item.sensusId)}
-                          />
-                        </TableCell>
-                        <TableCell className="max-w-64 truncate font-medium">{item.nama}</TableCell>
-                        <TableCell className="text-xs">
-                          NUP {item.kodeSiman ?? "—"}
-                          <div className="text-muted-foreground">{item.kodeBarang ?? "—"}</div>
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {item.ruang ?? "—"}
-                          <div className="text-muted-foreground">{item.gedung ?? "—"}</div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{item.kodeRegister ?? "—"}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableEmpty colSpan={5}>Tidak ada label yang lolos gate.</TableEmpty>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                Halaman {page} dari {totalPages} · {data?.total ?? 0} label
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
-                  Sebelumnya
-                </Button>
-                <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((p) => p + 1)}>
-                  Berikutnya
-                </Button>
-              </div>
-            </div>
+            <DataTable
+              columns={labelColumns}
+              data={data?.items ?? []}
+              getRowId={(item) => item.sensusId}
+              selectable
+              selectedIds={[...selected]}
+              onSelectionChange={(ids) => setSelected(new Set(ids))}
+              page={page}
+              total={data?.total}
+              limit={data?.limit ?? 20}
+              onPageChange={setPage}
+              loading={loading}
+              emptyText="Tidak ada label yang lolos gate."
+            />
           </CardContent>
         </Card>
       </div>
@@ -260,7 +221,7 @@ export default function LabelPage() {
             <h2 className="text-lg font-semibold">Label Siap Tempel</h2>
             <Badge variant="secondary">{printed.labels.length} label</Badge>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="label-grid grid grid-cols-1 gap-3 sm:grid-cols-2">
             {printed.labels.map((label) => (
               <div key={label.sensusId} className="flex gap-3 rounded-md border p-3">
                 {printed.qr[label.sensusId] && (

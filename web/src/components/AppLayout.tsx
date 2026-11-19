@@ -1,10 +1,9 @@
-import {
-  Activity, Building2, CheckCheck, FileSpreadsheet, FileText, History, LayoutDashboard,
-  LogOut, Printer, ScanLine, ShieldCheck, UserRound, Users,
-} from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/auth/auth-context";
+import { BottomNav } from "@/components/BottomNav";
+import { NAV_ITEMS } from "@/components/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,7 @@ export function AppLayout() {
   if (!user) return null;
 
   const isAdmin = user.role === "ADMIN" || user.role === "SUPERADMIN";
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   const handleLogout = async () => {
     await logout();
@@ -30,145 +30,33 @@ export function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-background">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+    <div className="min-h-dvh bg-muted/30">
+      <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5 sm:gap-x-4 sm:py-3">
           <div className="flex items-center gap-2 font-semibold">
             <ShieldCheck className="size-5" />
-            <span>Sensus Aset BMN</span>
+            <span className="whitespace-nowrap">Sensus Aset BMN</span>
           </div>
 
-          <nav className="order-3 flex w-full items-center gap-1 text-sm sm:order-none sm:w-auto">
-            <NavLink
-              to="/hierarki"
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                  isActive && "bg-muted font-medium",
-                )
-              }
-            >
-              <Building2 className="size-4" /> Hierarki
-            </NavLink>
-            {isAdmin && (
+          <nav aria-label="Navigasi utama bagian atas" className="hidden items-center gap-1 text-sm lg:flex">
+            {navItems.map((item) => (
               <NavLink
-                to="/dashboard"
+                key={item.to}
+                to={item.to}
+                end
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
+                    "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 hover:bg-muted",
                     isActive && "bg-muted font-medium",
                   )
                 }
               >
-                <LayoutDashboard className="size-4" /> Dashboard
+                <item.icon className="size-4" /> {item.label}
               </NavLink>
-            )}
-            <NavLink
-              to="/monitoring"
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                  isActive && "bg-muted font-medium",
-                )
-              }
-            >
-              <Activity className="size-4" /> Monitoring
-            </NavLink>
-            <NavLink
-              to="/log"
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                  isActive && "bg-muted font-medium",
-                )
-              }
-            >
-              <History className="size-4" /> Log
-            </NavLink>
-            <NavLink
-              to="/laporan"
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                  isActive && "bg-muted font-medium",
-                )
-              }
-            >
-              <FileText className="size-4" /> Laporan
-            </NavLink>
-            <NavLink
-              to="/profil"
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                  isActive && "bg-muted font-medium",
-                )
-              }
-            >
-              <UserRound className="size-4" /> Profil
-            </NavLink>
-            {isAdmin && (
-              <>
-                <NavLink
-                  to="/import"
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                      isActive && "bg-muted font-medium",
-                    )
-                  }
-                >
-                  <FileSpreadsheet className="size-4" /> Import SIMAN
-                </NavLink>
-                <NavLink
-                  to="/label"
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                      isActive && "bg-muted font-medium",
-                    )
-                  }
-                >
-                  <Printer className="size-4" /> Label
-                </NavLink>
-                <NavLink
-                  to="/admin/validasi"
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                      isActive && "bg-muted font-medium",
-                    )
-                  }
-                >
-                  <CheckCheck className="size-4" /> Validasi
-                </NavLink>
-                <NavLink
-                  to="/users"
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                      isActive && "bg-muted font-medium",
-                    )
-                  }
-                >
-                  <Users className="size-4" /> Manajemen User
-                </NavLink>
-              </>
-            )}
-            <NavLink
-              to="/scan"
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted",
-                  isActive && "bg-muted font-medium",
-                )
-              }
-            >
-              <ScanLine className="size-4" /> Scan
-            </NavLink>
+            ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <div className="hidden text-right text-xs leading-tight sm:block">
               <div className="font-medium">{user.nama}</div>
               <div className="text-muted-foreground">@{user.username}</div>
@@ -176,16 +64,24 @@ export function AppLayout() {
             <Badge variant={user.role === "SUPERADMIN" ? "default" : "secondary"}>
               {ROLE_LABEL[user.role]}
             </Badge>
-            <Button variant="outline" size="sm" onClick={() => void handleLogout()}>
-              <LogOut /> Keluar
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleLogout()}
+              aria-label="Keluar"
+            >
+              <LogOut />
+              <span className="hidden sm:inline">Keluar</span>
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-4 py-8">
+      <main className="mx-auto w-full max-w-5xl px-4 pb-nav pt-5 sm:py-8 lg:pb-8">
         <Outlet />
       </main>
+
+      <BottomNav isAdmin={isAdmin} />
     </div>
   );
 }

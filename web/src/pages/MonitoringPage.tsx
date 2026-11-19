@@ -64,6 +64,7 @@ export default function MonitoringPage() {
     {
       key: "nama",
       header: "Nama / NIM",
+      mobilePriority: "title",
       sortValue: (row) => row.nama,
       cell: (row) => (
         <div>
@@ -75,6 +76,7 @@ export default function MonitoringPage() {
     {
       key: "role",
       header: "Peran",
+      mobilePriority: "primary",
       sortValue: (row) => row.role,
       cell: (row) => <Badge variant="outline">{ROLE_LABEL[row.role]}</Badge>,
     },
@@ -104,6 +106,7 @@ export default function MonitoringPage() {
     {
       key: "laporan",
       header: "",
+      mobilePriority: "actions",
       cell: (row) =>
         isAdmin && row.role === "MAHASISWA" ? (
           <Button asChild size="sm" variant="outline">
@@ -117,6 +120,7 @@ export default function MonitoringPage() {
     {
       key: "ruang",
       header: "Gedung / Ruang",
+      mobilePriority: "title",
       sortValue: (row) => `${row.gedung} ${row.nama}`,
       cell: (row) => (
         <div>
@@ -167,7 +171,7 @@ export default function MonitoringPage() {
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-6">
+        <CardContent className="grid grid-cols-2 gap-3 pt-4 sm:flex sm:flex-wrap sm:items-end sm:pt-6">
           <div className="space-y-2">
             <Label htmlFor="mon-from">Dari tanggal</Label>
             <Input id="mon-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
@@ -176,22 +180,23 @@ export default function MonitoringPage() {
             <Label htmlFor="mon-to">Sampai tanggal</Label>
             <Input id="mon-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
           </div>
-          <Button onClick={() => setApplied({ from, to })}>Terapkan</Button>
+          <Button className="col-span-2 sm:col-auto sm:w-auto" onClick={() => setApplied({ from, to })}>Terapkan</Button>
           <Button
             variant="ghost"
+            className="col-span-2 sm:col-auto sm:w-auto"
             onClick={() => { setFrom(""); setTo(""); setApplied({ from: "", to: "" }); }}
           >
             Reset
           </Button>
           {topContributors.length > 0 && (
-            <div className="ml-auto text-right text-xs text-muted-foreground">
+            <div className="col-span-2 text-xs text-muted-foreground sm:col-auto sm:ml-auto sm:text-right">
               Kontributor teratas: {topContributors.map((row) => row.nama).join(", ")}
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
           <CardContent className="pt-5">
             <div className="flex items-center justify-between text-xs text-muted-foreground">Grup input <Boxes className="size-4" /></div>

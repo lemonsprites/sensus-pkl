@@ -11,7 +11,12 @@ export const grupParamSchema = z.object({
 });
 
 export const kandidatQuerySchema = z.object({
-  q: z.string().trim().max(120).optional(),
+  q: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
 });
 
 const kondisiSchema = z.enum(["BAIK", "RUSAK_RINGAN", "RUSAK_BERAT"]);

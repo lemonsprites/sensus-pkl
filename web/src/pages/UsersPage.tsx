@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   KeyRound,
   Loader2,
   Pencil,
@@ -14,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/auth/auth-context";
+import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,16 +26,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableEmpty,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import type { Paginated, Role, User } from "@/lib/types";
 
@@ -219,7 +208,106 @@ export default function UsersPage() {
   };
 
   const roleChoices = isSuperadmin ? ROLE_OPTIONS : (["MAHASISWA"] as Role[]);
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
+
+  const userColumns: DataTableColumn<User>[] = [
+    {
+      key: "nama",
+      header: "Nama",
+      mobilePriority: "title",
+      sortValue: (user) => user.nama,
+      cell: (user) => (
+        <div className="font-medium">
+          {user.nama}
+          {user.id === actor?.id && (
+            <span className="ml-2 text-xs text-muted-foreground">(Anda)</span>
+          )}
+          {user.nim && (
+            <div className="text-xs font-normal text-muted-foreground">NIM {user.nim}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "username",
+      header: "Username",
+      mobilePriority: "subtitle",
+      sortValue: (user) => user.username,
+      cell: (user) => (
+        <div className="text-muted-foreground">
+          @{user.username}
+          {user.programStudi && <div className="text-xs">{user.programStudi}</div>}
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      mobilePriority: "primary",
+      sortValue: (user) => user.role,
+      cell: (user) => (
+        <Badge variant={user.role === "SUPERADMIN" ? "default" : "outline"}>
+          {ROLE_LABEL[user.role]}
+        </Badge>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobilePriority: "primary",
+      sortValue: (user) => (user.isActive ? 1 : 0),
+      cell: (user) => (
+        <Badge variant={user.isActive ? "secondary" : "destructive"}>
+          {user.isActive ? "Aktif" : "Nonaktif"}
+        </Badge>
+      ),
+    },
+    {
+      key: "lastLogin",
+      header: "Login terakhir",
+      mobileLabel: "Login terakhir",
+      className: "whitespace-nowrap text-xs text-muted-foreground",
+      cell: (user) => formatDate(user.lastLoginAt),
+    },
+    {
+      key: "aksi",
+      header: "",
+      mobilePriority: "actions",
+      cell: (user) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Edit"
+            aria-label={`Edit ${user.username}`}
+            disabled={!canManage(user)}
+            onClick={() => startEdit(user)}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Reset password"
+            aria-label={`Reset password ${user.username}`}
+            disabled={!canManage(user) || busyId === user.id}
+            onClick={() => void handleReset(user)}
+          >
+            <KeyRound />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            title={user.isActive ? "Nonaktifkan" : "Aktifkan"}
+            aria-label={`${user.isActive ? "Nonaktifkan" : "Aktifkan"} ${user.username}`}
+            disabled={!canManage(user) || busyId === user.id}
+            onClick={() => void handleToggleActive(user)}
+          >
+            {user.isActive ? <UserX /> : <UserCheck />}
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   if (!isAdmin) return null;
 
@@ -344,7 +432,7 @@ export default function UsersPage() {
                   <Input id="create-hp" value={createForm.noHp} onChange={(event) => setCreateForm((form) => ({ ...form, noHp: event.target.value }))} />
                 </div>
               </div>
-              <Button type="submit" disabled={creating}>
+              <Button type="submit" className="w-full sm:w-auto" disabled={creating}>
                 {creating && <Loader2 className="animate-spin" />}
                 Simpan User
               </Button>
@@ -422,12 +510,12 @@ export default function UsersPage() {
                   <Input id="edit-hp" value={editForm.noHp} onChange={(event) => setEditForm((form) => ({ ...form, noHp: event.target.value }))} />
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button type="submit" disabled={savingEdit}>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button type="submit" className="w-full sm:w-auto" disabled={savingEdit}>
                   {savingEdit ? <Loader2 className="animate-spin" /> : <Save />}
                   Simpan
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setEditing(null)}>
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setEditing(null)}>
                   Batal
                 </Button>
               </div>
@@ -444,17 +532,18 @@ export default function UsersPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-end gap-2">
             <form
-              className="flex flex-1 flex-wrap items-end gap-2"
+              className="grid flex-1 gap-2 sm:flex sm:flex-wrap sm:items-end"
               onSubmit={(event) => {
                 event.preventDefault();
                 setQ(search.trim());
                 setPage(1);
               }}
             >
-              <div className="min-w-48 flex-1 space-y-2">
+              <div className="min-w-0 flex-1 space-y-2">
                 <Label htmlFor="search">Cari nama/username</Label>
                 <Input
                   id="search"
+                  type="search"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="kata kunci…"
@@ -465,6 +554,7 @@ export default function UsersPage() {
                   <Label htmlFor="filter-role">Role</Label>
                   <Select
                     id="filter-role"
+                    className="w-full sm:w-auto"
                     value={filterRole}
                     onChange={(event) => {
                       setFilterRole(event.target.value as "" | Role);
@@ -484,6 +574,7 @@ export default function UsersPage() {
                 <Label htmlFor="filter-status">Status</Label>
                 <Select
                   id="filter-status"
+                  className="w-full sm:w-auto"
                   value={filterActive}
                   onChange={(event) => {
                     setFilterActive(event.target.value as "" | "true" | "false");
@@ -495,120 +586,23 @@ export default function UsersPage() {
                   <option value="false">Nonaktif</option>
                 </Select>
               </div>
-              <Button type="submit" variant="secondary">
+              <Button type="submit" variant="secondary" className="w-full sm:w-auto">
                 <Search /> Cari
               </Button>
             </form>
           </div>
 
-          {loading ? (
-            <Loader label="Memuat user…" />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama</TableHead>
-                  <TableHead>Username</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Login terakhir</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data && data.items.length > 0 ? (
-                  data.items.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="font-medium">
-                        {user.nama}
-                        {user.id === actor?.id && (
-                          <span className="ml-2 text-xs text-muted-foreground">(Anda)</span>
-                        )}
-                        {user.nim && <div className="text-xs font-normal text-muted-foreground">NIM {user.nim}</div>}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        @{user.username}
-                        {user.programStudi && <div className="text-xs">{user.programStudi}</div>}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.role === "SUPERADMIN" ? "default" : "outline"}>
-                          {ROLE_LABEL[user.role]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.isActive ? "secondary" : "destructive"}>
-                          {user.isActive ? "Aktif" : "Nonaktif"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(user.lastLoginAt)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Edit"
-                            aria-label={`Edit ${user.username}`}
-                            disabled={!canManage(user)}
-                            onClick={() => startEdit(user)}
-                          >
-                            <Pencil />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Reset password"
-                            aria-label={`Reset password ${user.username}`}
-                            disabled={!canManage(user) || busyId === user.id}
-                            onClick={() => void handleReset(user)}
-                          >
-                            <KeyRound />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title={user.isActive ? "Nonaktifkan" : "Aktifkan"}
-                            aria-label={`${user.isActive ? "Nonaktifkan" : "Aktifkan"} ${user.username}`}
-                            disabled={!canManage(user) || busyId === user.id}
-                            onClick={() => void handleToggleActive(user)}
-                          >
-                            {user.isActive ? <UserX /> : <UserCheck />}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableEmpty colSpan={6}>Tidak ada user yang cocok.</TableEmpty>
-                )}
-              </TableBody>
-            </Table>
-          )}
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Halaman {data?.page ?? page} dari {totalPages}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                <ChevronLeft /> Sebelumnya
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Berikutnya <ChevronRight />
-              </Button>
-            </div>
-          </div>
+          <DataTable
+            columns={userColumns}
+            data={data?.items ?? []}
+            getRowId={(user) => user.id}
+            page={page}
+            total={data?.total}
+            limit={data?.limit ?? 20}
+            onPageChange={setPage}
+            loading={loading}
+            emptyText="Tidak ada user yang cocok."
+          />
         </CardContent>
       </Card>
     </div>

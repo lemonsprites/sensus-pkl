@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, CheckCircle2, Loader2, Paperclip, Pencil, Plus, Save,
   Search, Trash2, Upload, XCircle,
@@ -11,20 +11,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import type {
   DokumenItem, DokumenListResponse, KandidatItem, KandidatResponse, Kondisi,
-  RuangData, SensusGrup, SensusStatus,
+  RuangData, Sensus, SensusGrup, SensusStatus,
 } from "@/lib/types";
 
 const STATUS_LABEL: Record<SensusStatus, string> = {
@@ -68,6 +66,8 @@ export default function SensusRuangPage() {
 
   const [data, setData] = useState<RuangData | null>(null);
   const [kandidat, setKandidat] = useState<KandidatItem[]>([]);
+  const [kandidatLoading, setKandidatLoading] = useState(false);
+  const [picked, setPicked] = useState<Record<string, KandidatItem>>({});
   const [kandidatQuery, setKandidatQuery] = useState("");
   const [rows, setRows] = useState<FormRow[]>([newRow()]);
   const [loading, setLoading] = useState(true);
@@ -106,24 +106,53 @@ export default function SensusRuangPage() {
 
   const loadKandidat = useCallback(async (q = "") => {
     if (!ruangId) return;
+    setKandidatLoading(true);
     try {
       const params = q ? `?q=${encodeURIComponent(q)}` : "";
       const result = await api<KandidatResponse>(`/ruang/${ruangId}/kandidat${params}`);
       setKandidat(result.items);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal memuat kandidat aset");
+    } finally {
+      setKandidatLoading(false);
     }
   }, [ruangId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-    void loadKandidat();
-  }, [load, loadKandidat]);
+  }, [load]);
+
+  // Pencarian kandidat otomatis (debounce) agar pengguna mobile tidak perlu menekan tombol.
+  useEffect(() => {
+    const handle = window.setTimeout(() => void loadKandidat(kandidatQuery), 300);
+    return () => window.clearTimeout(handle);
+  }, [kandidatQuery, loadKandidat]);
 
   const updateRow = (key: string, patch: Partial<FormRow>) => {
     setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   };
+
+  const selectBarang = (key: string, value: string) => {
+    updateRow(key, { kodeBarang: value });
+    const item = kandidat.find((candidate) => candidate.kodeBarang === value);
+    if (item) setPicked((current) => ({ ...current, [value]: item }));
+  };
+
+  // Gabungkan hasil pencarian dengan aset yang sudah dipilih supaya label tidak hilang saat query berubah.
+  const kandidatOptions = useMemo<ComboboxOption[]>(() => {
+    const merged = new Map<string, KandidatItem>();
+    for (const item of kandidat) merged.set(item.kodeBarang, item);
+    for (const item of Object.values(picked)) {
+      if (!merged.has(item.kodeBarang)) merged.set(item.kodeBarang, item);
+    }
+    return [...merged.values()].map((item) => ({
+      value: item.kodeBarang,
+      label: item.nama,
+      hint: `${item.kodeBarang} · ${item.tersedia} NUP tersedia`,
+      keywords: `${item.kategori ?? ""} ${item.kodeBarang}`,
+    }));
+  }, [kandidat, picked]);
 
   const submit = async () => {
     if (!ruangId) return;
@@ -148,6 +177,7 @@ export default function SensusRuangPage() {
       await api(`/ruang/${ruangId}/sensus-grup`, { method: "POST", body: { rows: payload } });
       setNotice(`${payload.length} baris input dialokasikan ke NUP.`);
       setRows([newRow()]);
+      setPicked({});
       setFormOpen(false);
       await load();
       await loadKandidat(kandidatQuery);
@@ -280,6 +310,7 @@ export default function SensusRuangPage() {
     {
       key: "aset",
       header: "Aset",
+      mobilePriority: "title",
       sortValue: (group) => group.namaBarang,
       cell: (group) => (
         <div className="max-w-64">
@@ -291,6 +322,7 @@ export default function SensusRuangPage() {
     {
       key: "kondisi",
       header: "Kondisi / jumlah",
+      mobilePriority: "primary",
       sortValue: (group) => group.jumlah,
       cell: (group) => <span className="text-xs">{KONDISI_LABEL[group.kondisi]} · {group.jumlah} unit</span>,
     },
@@ -303,6 +335,7 @@ export default function SensusRuangPage() {
     {
       key: "status",
       header: "Status",
+      mobilePriority: "primary",
       sortValue: (group) => group.status,
       cell: (group) => <StatusBadge status={group.status} />,
     },
@@ -320,22 +353,78 @@ export default function SensusRuangPage() {
     {
       key: "aksi",
       header: "",
+      mobilePriority: "actions",
       cell: (group) => (
         <div className="flex justify-end gap-1">
           {(group.status === "ASSESSED" || group.status === "DOCS_COMPLETE") && (
-            <Button size="icon" variant="ghost" title="Koreksi kondisi/catatan" onClick={() => openEdit(group)}><Pencil /></Button>
+            <Button size="icon" variant="ghost" title="Koreksi kondisi/catatan" aria-label="Koreksi kondisi/catatan" onClick={() => openEdit(group)}><Pencil /></Button>
           )}
-          <Button size="icon" variant="ghost" title="Dokumen" onClick={() => void loadDocs(group)}><Paperclip /></Button>
+          <Button size="icon" variant="ghost" title="Dokumen" aria-label="Dokumen" onClick={() => void loadDocs(group)}><Paperclip /></Button>
           {canVerify && group.status === "DOCS_COMPLETE" && (
-            <Button size="icon" variant="ghost" title="Validasi" onClick={() => void verifyGroup(group)}><CheckCircle2 /></Button>
+            <Button size="icon" variant="ghost" title="Validasi" aria-label="Validasi" onClick={() => void verifyGroup(group)}><CheckCircle2 /></Button>
           )}
           {canVerify && (group.status === "VALIDATED" || group.status === "DOCS_COMPLETE") && (
-            <Button size="icon" variant="ghost" title="Tolak" onClick={() => void rejectGroup(group)}><XCircle /></Button>
+            <Button size="icon" variant="ghost" title="Tolak" aria-label="Tolak" onClick={() => void rejectGroup(group)}><XCircle /></Button>
           )}
           {group.status !== "VALIDATED" && (canVerify || group.createdBy.id === user?.id) && (
-            <Button size="icon" variant="ghost" title="Hapus grup" onClick={() => void deleteGroup(group)}><Trash2 /></Button>
+            <Button size="icon" variant="ghost" title="Hapus grup" aria-label="Hapus grup" onClick={() => void deleteGroup(group)}><Trash2 /></Button>
           )}
         </div>
+      ),
+    },
+  ];
+
+  const mappingColumns: DataTableColumn<Sensus>[] = [
+    {
+      key: "nup",
+      header: "NUP",
+      sortValue: (row) => Number(row.masterAset.kodeSiman ?? 0),
+      cell: (row) => (
+        <span className="font-mono text-xs">{row.masterAset.kodeSiman ?? "—"}</span>
+      ),
+    },
+    {
+      key: "register",
+      header: "Kode Register",
+      mobileLabel: "Kode register",
+      mobilePriority: "subtitle",
+      sortValue: (row) => row.masterAset.kodeRegister ?? "",
+      cell: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.masterAset.kodeRegister ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "nama",
+      header: "Nama aset",
+      mobilePriority: "title",
+      sortValue: (row) => row.masterAset.nama,
+      cell: (row) => <span className="block max-w-64 truncate">{row.masterAset.nama}</span>,
+    },
+    {
+      key: "kondisi",
+      header: "Kondisi",
+      mobilePriority: "primary",
+      cell: (row) => (
+        <span className="text-xs">{row.kondisi ? KONDISI_LABEL[row.kondisi] : "—"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobilePriority: "primary",
+      sortValue: (row) => row.status,
+      cell: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "label",
+      header: "Label",
+      cell: (row) => (
+        <span className="text-xs">
+          Cetak: {row.labelPrintedAt ? "sudah" : "belum"} · Tempel:{" "}
+          {row.labelAppliedAt ? "sudah" : "belum"}
+        </span>
       ),
     },
   ];
@@ -368,10 +457,10 @@ export default function SensusRuangPage() {
               {data.ruang.lantai > 0 ? ` · Lantai ${data.ruang.lantai}` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Badge variant="outline">{data.ruang._count.grup} grup input</Badge>
             <Badge variant="secondary">{data.ruang._count.sensus} NUP disensus</Badge>
-            <Button onClick={() => { setRows([newRow()]); setFormOpen(true); }}>
+            <Button className="w-full sm:w-auto" onClick={() => { setRows([newRow()]); setFormOpen(true); }}>
               <Plus /> Tambah Sensus
             </Button>
           </div>
@@ -388,68 +477,117 @@ export default function SensusRuangPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-64 flex-1 space-y-2">
-              <Label htmlFor="cari-kandidat">Cari kandidat aset</Label>
+            <div className="space-y-2">
+              <Label htmlFor="cari-kandidat">Cari aset (nama / kode barang / NUP)</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="cari-kandidat" value={kandidatQuery} onChange={(event) => setKandidatQuery(event.target.value)} placeholder="nama / kode barang" className="pl-9" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="cari-kandidat"
+                  value={kandidatQuery}
+                  onChange={(event) => setKandidatQuery(event.target.value)}
+                  placeholder="mis. laptop, 3100xxxx, atau nomor NUP"
+                  className="pl-9"
+                  inputMode="search"
+                  autoComplete="off"
+                />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Daftar aset ikut tersaring otomatis saat Anda mengetik.
+              </p>
             </div>
-            <Button variant="secondary" onClick={() => void loadKandidat(kandidatQuery)}><Search /> Cari</Button>
-          </div>
 
-          <div className="space-y-3">
-            {rows.map((row, index) => (
-              <div key={row.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
-                <div className="space-y-1 sm:col-span-5">
-                  <Label>Aset</Label>
-                  <Select value={row.kodeBarang} onChange={(event) => updateRow(row.key, { kodeBarang: event.target.value })}>
-                    <option value="">— pilih aset —</option>
-                    {kandidat.map((item) => (
-                      <option key={item.kodeBarang} value={item.kodeBarang}>
-                        {item.nama} ({item.kodeBarang}) — {item.tersedia} NUP
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label>Kondisi</Label>
-                  <Select value={row.kondisi} onChange={(event) => updateRow(row.key, { kondisi: event.target.value as Kondisi })}>
-                    {Object.entries(KONDISI_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="space-y-1 sm:col-span-1">
-                  <Label>Jumlah</Label>
-                  <Input type="number" min={1} value={row.jumlah} onChange={(event) => updateRow(row.key, { jumlah: event.target.value })} />
-                </div>
-                <div className="space-y-1 sm:col-span-3">
-                  <Label>Catatan (opsional)</Label>
-                  <Input value={row.catatan} onChange={(event) => updateRow(row.key, { catatan: event.target.value })} placeholder="mis. merk berbeda" />
-                </div>
-                <div className="flex items-end sm:col-span-1">
-                  <Button variant="ghost" size="icon" onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))} disabled={rows.length === 1} aria-label="Hapus baris">
-                    <Trash2 />
-                  </Button>
-                </div>
-                <div className="text-xs text-muted-foreground sm:col-span-12">
-                  Baris {index + 1} {row.kodeBarang ? `· ${kandidat.find((item) => item.kodeBarang === row.kodeBarang)?.tersedia ?? 0} NUP tersedia` : ""}
-                </div>
-              </div>
-            ))}
-          </div>
+            <div className="space-y-3">
+              {rows.map((row, index) => (
+                <div key={row.key} className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Baris {index + 1}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRows((current) => current.filter((item) => item.key !== row.key))}
+                      disabled={rows.length === 1}
+                      aria-label={`Hapus baris ${index + 1}`}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setRows((current) => [...current, newRow()])} disabled={rows.length >= 20}>
-              <Plus /> Tambah baris
-            </Button>
-            <Button onClick={() => void submit()} disabled={submitting}>
-              {submitting ? <Loader2 className="animate-spin" /> : <Save />}
-              Simpan & Alokasikan NUP
-            </Button>
-          </div>
+                  <div className="space-y-1">
+                    <Label>Aset</Label>
+                    <Combobox
+                      options={kandidatOptions}
+                      value={row.kodeBarang}
+                      onValueChange={(value) => selectBarang(row.key, value)}
+                      placeholder="— pilih aset —"
+                      searchPlaceholder="Cari nama / kode / NUP…"
+                      emptyText={
+                        kandidatLoading ? "Memuat aset…" : "Tidak ada aset yang cocok."
+                      }
+                      loading={kandidatLoading}
+                    />
+                    {row.kodeBarang && (
+                      <p className="text-xs text-muted-foreground">
+                        {kandidat.find((item) => item.kodeBarang === row.kodeBarang)?.tersedia ??
+                          picked[row.kodeBarang]?.tersedia ??
+                          0}{" "}
+                        NUP tersedia
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label>Jumlah</Label>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={row.jumlah}
+                        onChange={(event) => updateRow(row.key, { jumlah: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Kondisi</Label>
+                      <Select
+                        value={row.kondisi}
+                        onChange={(event) =>
+                          updateRow(row.key, { kondisi: event.target.value as Kondisi })
+                        }
+                      >
+                        {Object.entries(KONDISI_LABEL).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label>Catatan (opsional)</Label>
+                    <Input
+                      value={row.catatan}
+                      onChange={(event) => updateRow(row.key, { catatan: event.target.value })}
+                      placeholder="mis. merk berbeda"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="sticky -bottom-4 -mx-4 -mb-4 flex flex-col gap-2 border-t bg-background/95 p-4 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+              <Button
+                variant="outline"
+                onClick={() => setRows((current) => [...current, newRow()])}
+                disabled={rows.length >= 20}
+              >
+                <Plus /> Tambah baris
+              </Button>
+              <Button onClick={() => void submit()} disabled={submitting}>
+                {submitting ? <Loader2 className="animate-spin" /> : <Save />}
+                Simpan & Alokasikan NUP
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -479,18 +617,18 @@ export default function SensusRuangPage() {
           <div className="space-y-4">
             {docsError && <Alert variant="destructive"><AlertDescription>{docsError}</AlertDescription></Alert>}
             <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-56 flex-1 space-y-2">
+              <div className="min-w-0 flex-1 basis-full space-y-2 sm:basis-auto">
                 <Label htmlFor="grup-file">File (foto/PDF, maks 15 MB)</Label>
                 <Input id="grup-file" type="file" accept="image/*,application/pdf" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
               </div>
-              <div className="space-y-2">
+              <div className="w-full space-y-2 sm:w-40">
                 <Label htmlFor="grup-jenis">Jenis</Label>
                 <Select id="grup-jenis" value={uploadJenis} onChange={(event) => setUploadJenis(event.target.value as "FOTO" | "DOKUMEN")}>
                   <option value="FOTO">Foto</option>
                   <option value="DOKUMEN">Dokumen pendukung</option>
                 </Select>
               </div>
-              <Button onClick={() => void uploadDoc()} disabled={!uploadFile || uploading}>
+              <Button className="w-full sm:w-auto" onClick={() => void uploadDoc()} disabled={!uploadFile || uploading}>
                 {uploading ? <Loader2 className="animate-spin" /> : <Upload />} Upload
               </Button>
             </div>
@@ -562,34 +700,13 @@ export default function SensusRuangPage() {
       <Card>
         <CardHeader><CardTitle>NUP hasil mapping ruang ini</CardTitle></CardHeader>
         <CardContent>
-          {data && data.items.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>NUP</TableHead>
-                  <TableHead>Kode Register</TableHead>
-                  <TableHead>Nama aset</TableHead>
-                  <TableHead>Kondisi</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Label</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.items.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-mono text-xs">{row.masterAset.kodeSiman ?? "—"}</TableCell>
-                    <TableCell className="font-mono text-xs">{row.masterAset.kodeRegister ?? "—"}</TableCell>
-                    <TableCell className="max-w-64 truncate">{row.masterAset.nama}</TableCell>
-                    <TableCell className="text-xs">{row.kondisi ? KONDISI_LABEL[row.kondisi] : "—"}</TableCell>
-                    <TableCell><StatusBadge status={row.status} /></TableCell>
-                    <TableCell className="text-xs">
-                      Cetak: {row.labelPrintedAt ? "sudah" : "belum"} · Tempel: {row.labelAppliedAt ? "sudah" : "belum"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : <p className="text-sm text-muted-foreground">Belum ada NUP yang dipetakan ke ruang ini.</p>}
+          <DataTable
+            columns={mappingColumns}
+            data={data?.items ?? []}
+            getRowId={(row) => row.id}
+            emptyText="Belum ada NUP yang dipetakan ke ruang ini."
+            searchPlaceholder="Cari NUP / kode register / nama aset…"
+          />
         </CardContent>
       </Card>
     </div>

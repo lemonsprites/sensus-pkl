@@ -156,10 +156,11 @@ export default function AdminValidationPage() {
     {
       key: "aset",
       header: "Aset",
+      mobilePriority: "title",
       sortValue: (row) => row.namaBarang,
       cell: (row) => (
-        <div>
-          <div className="font-medium">{row.namaBarang}</div>
+        <div className="max-w-64">
+          <div className="truncate font-medium">{row.namaBarang}</div>
           <div className="font-mono text-xs text-muted-foreground">{row.kodeBarang}</div>
         </div>
       ),
@@ -167,6 +168,7 @@ export default function AdminValidationPage() {
     {
       key: "ruang",
       header: "Ruang",
+      mobilePriority: "subtitle",
       sortValue: (row) => `${row.ruang.bangunanAset.nama} ${row.ruang.nama}`,
       cell: (row) => (
         <div className="text-sm">
@@ -178,6 +180,7 @@ export default function AdminValidationPage() {
     {
       key: "kondisi",
       header: "Kondisi",
+      mobilePriority: "primary",
       sortValue: (row) => row.kondisi,
       cell: (row) => <span className="text-sm">{KONDISI_LABEL[row.kondisi]} · {row.jumlah}</span>,
     },
@@ -186,6 +189,7 @@ export default function AdminValidationPage() {
     {
       key: "status",
       header: "Status",
+      mobilePriority: "primary",
       sortValue: (row) => row.status,
       cell: (row) => <StatusBadge status={row.status} />,
     },
@@ -203,15 +207,16 @@ export default function AdminValidationPage() {
     {
       key: "updatedAt",
       header: "Diperbarui",
-      sortValue: (row) => row.updatedAt,
       className: "whitespace-nowrap text-xs",
+      sortValue: (row) => row.updatedAt,
       cell: (row) => formatDate(row.updatedAt),
     },
     {
       key: "aksi",
       header: "",
+      mobilePriority: "actions",
       cell: (row) => (
-        <Button size="sm" variant="outline" onClick={() => void openDetail(row)}>
+        <Button size="sm" variant="outline" className="sm:ml-auto" onClick={() => void openDetail(row)}>
           <Eye /> Detail
         </Button>
       ),
@@ -227,7 +232,7 @@ export default function AdminValidationPage() {
             Antrean verifikasi admin: cek NUP, dokumen, koreksi, lalu validasi atau tolak.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={loading ? "animate-spin" : ""} /> Muat ulang
           </Button>
@@ -292,12 +297,11 @@ export default function AdminValidationPage() {
                 <div><span className="text-muted-foreground">Kondisi</span><div>{KONDISI_LABEL[detail.kondisi]} · {detail.jumlah} unit</div></div>
                 <div><span className="text-muted-foreground">NUP</span><div>{detail.sensus.length}</div></div>
                 <div><span className="text-muted-foreground">Dokumen</span><div>{docs?.items.length ?? detail.dokumen.length} file</div></div>
-              </div>
-              {detail.catatan && <p className="rounded-md bg-muted p-2 text-xs">Catatan: {detail.catatan}</p>}
+              </div>              {detail.catatan && <p className="rounded-md bg-muted p-2 text-xs">Catatan: {detail.catatan}</p>}
 
               <div>
                 <div className="mb-1 font-medium">NUP dalam grup</div>
-                <div className="max-h-32 overflow-auto rounded-md border p-2 font-mono text-xs">
+                <div className="max-h-40 overflow-auto rounded-md border p-2 font-mono text-xs">
                   {detail.sensus.map((row) => (
                     <span key={row.id} className="mr-2 inline-block">{row.masterAset.kodeSiman ?? row.masterAset.kodeRegister ?? row.id.slice(0, 8)}</span>
                   ))}
@@ -307,7 +311,7 @@ export default function AdminValidationPage() {
               <div>
                 <div className="mb-1 font-medium">Dokumen</div>
                 {detailLoading ? <p className="text-muted-foreground">Memuat dokumen…</p> : docs && docs.items.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {docs.items.map((doc) => (
                       <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer" className="rounded-md border p-1 text-xs">
                         {doc.jenis === "FOTO" && <img src={doc.thumbUrl ?? doc.url} alt="Foto" className="h-20 w-full rounded object-cover" />}

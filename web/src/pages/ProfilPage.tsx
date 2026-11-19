@@ -114,12 +114,12 @@ export default function ProfilPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
           <ShieldCheck className="size-6" />
         </div>
-        <div>
-          <h1 className="text-xl font-semibold">{user.nama}</h1>
-          <p className="text-sm text-muted-foreground">@{user.username}</p>
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold">{user.nama}</h1>
+          <p className="truncate text-sm text-muted-foreground">@{user.username}</p>
         </div>
         <Badge variant={user.role === "SUPERADMIN" ? "default" : "secondary"}>
           {ROLE_LABEL[user.role]}
@@ -185,7 +185,7 @@ export default function ProfilPage() {
               </div>
             </div>
 
-            <Button type="submit" disabled={!profilDirty || savingProfil}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={!profilDirty || savingProfil}>
               {savingProfil ? <Loader2 className="animate-spin" /> : <Save />}
               Simpan Profil
             </Button>
@@ -251,7 +251,7 @@ export default function ProfilPage() {
               </div>
             </div>
 
-            <Button type="submit" disabled={savingPassword}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={savingPassword}>
               {savingPassword && <Loader2 className="animate-spin" />}
               Ganti Password
             </Button>

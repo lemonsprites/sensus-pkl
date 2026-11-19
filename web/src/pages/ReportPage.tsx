@@ -168,7 +168,7 @@ export default function ReportPage() {
               : "Laporan kontribusi sensus Anda, siap dicetak dan dijadikan lampiran PKL."}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:flex sm:flex-row">
           <Button variant="outline" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={loading ? "animate-spin" : ""} /> Terapkan filter
           </Button>

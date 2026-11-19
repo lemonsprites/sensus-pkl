@@ -2,18 +2,19 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ArrowUpRight, Download, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import { Loader } from "@/components/Loader";
 import { api, apiDownload } from "@/lib/api";
-import type { DashboardResponse, DashboardTab } from "@/lib/types";
+import type {
+  DashboardGroupItem, DashboardNupItem, DashboardResponse, DashboardTab,
+} from "@/lib/types";
+
+type DashboardItem = DashboardGroupItem | DashboardNupItem;
 
 const TABS: Array<[DashboardTab, string]> = [
   ["PERLU_DOKUMEN", "Perlu Dokumen"],
@@ -81,7 +82,94 @@ export default function DashboardPage() {
     }
   };
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
+  const columns: DataTableColumn<DashboardItem>[] = [
+    {
+      key: "aset",
+      header: "Aset",
+      mobilePriority: "title",
+      sortValue: (item) => (item.kind === "GROUP" ? item.namaBarang : item.masterAset.nama),
+      cell: (item) =>
+        item.kind === "GROUP" ? (
+          <div className="max-w-72">
+            <div className="truncate font-medium">{item.namaBarang}</div>
+            <div className="font-mono text-xs text-muted-foreground">{item.kodeBarang}</div>
+          </div>
+        ) : (
+          <div className="max-w-72">
+            <div className="truncate font-medium">{item.masterAset.nama}</div>
+            <div className="font-mono text-xs text-muted-foreground">
+              {item.masterAset.kodeRegister ?? "—"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              NUP {item.masterAset.kodeSiman ?? "—"}
+            </div>
+          </div>
+        ),
+    },
+    {
+      key: "ruang",
+      header: "Ruang",
+      mobilePriority: "subtitle",
+      sortValue: (item) => (item.ruang ? `${item.ruang.bangunanAset.nama} ${item.ruang.nama}` : ""),
+      cell: (item) =>
+        item.ruang ? (
+          <div className="text-xs">
+            <div>{item.ruang.nama}</div>
+            <div className="text-muted-foreground">{item.ruang.bangunanAset.nama}</div>
+          </div>
+        ) : (
+          <span className="text-xs">—</span>
+        ),
+    },
+    {
+      key: "detail",
+      header: "Detail",
+      cell: (item) => (
+        <div className="text-xs">
+          {item.kind === "GROUP"
+            ? `${item.kondisi} · ${item.jumlah} unit`
+            : item.grup
+              ? `${item.grup.kondisi} · ${item.grup.jumlah} unit`
+              : "—"}
+          {item.kind === "GROUP" && item.catatanOtomatis && (
+            <div className="text-muted-foreground">{item.catatanOtomatis}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobilePriority: "primary",
+      sortValue: (item) => item.status,
+      cell: (item) => (
+        <Badge variant={item.status === "VALIDATED" ? "default" : "secondary"}>
+          {STATUS_LABEL[item.status] ?? item.status}
+        </Badge>
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: "Update",
+      mobileLabel: "Diperbarui",
+      className: "whitespace-nowrap text-xs text-muted-foreground",
+      sortValue: (item) => item.updatedAt,
+      cell: (item) => formatDate(item.updatedAt),
+    },
+    {
+      key: "buka",
+      header: "",
+      mobilePriority: "actions",
+      cell: (item) =>
+        item.ruang ? (
+          <Button asChild size="sm" variant="outline">
+            <Link to={`/sensus/${item.ruang.id}`}><ArrowUpRight /> Buka</Link>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+  ];
 
   return (
     <div className="space-y-5">
@@ -92,7 +180,7 @@ export default function DashboardPage() {
             Inbox pekerjaan: dokumen, verifikasi, cetak, dan tempel label.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex">
           <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExport("csv")}>
             <Download /> Export CSV
           </Button>
@@ -124,105 +212,30 @@ export default function DashboardPage() {
         <CardHeader><CardTitle>{TABS.find(([value]) => value === tab)?.[1]}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <form
-            className="flex flex-wrap items-end gap-2"
+            className="grid gap-2 sm:flex sm:flex-wrap sm:items-end"
             onSubmit={(event: FormEvent) => { event.preventDefault(); setQ(qInput.trim()); setPage(1); }}
           >
-            <div className="min-w-56 flex-1 space-y-2">
+            <div className="min-w-0 flex-1 space-y-2">
               <Label htmlFor="dash-q">Cari</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="dash-q" value={qInput} onChange={(event) => setQInput(event.target.value)} placeholder="nama / kode register / NUP / kode barang" className="pl-9" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input id="dash-q" type="search" value={qInput} onChange={(event) => setQInput(event.target.value)} placeholder="nama / kode register / NUP / kode barang" className="pl-9" />
               </div>
             </div>
-            <Button type="submit" variant="secondary"><Search /> Cari</Button>
+            <Button type="submit" variant="secondary" className="w-full sm:w-auto"><Search /> Cari</Button>
           </form>
 
-          {loading ? (
-            <Loader label="Memuat inbox…" />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Aset</TableHead>
-                  <TableHead>Ruang</TableHead>
-                  <TableHead>Detail</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Update</TableHead>
-                  <TableHead className="text-right">Buka</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data && data.items.length > 0 ? (
-                  data.items.map((item) => {
-                    const roomId = item.ruang?.id;
-                    return (
-                      <TableRow key={`${item.kind}-${item.id}`}>
-                        <TableCell className="max-w-72">
-                          {item.kind === "GROUP" ? (
-                            <>
-                              <div className="truncate font-medium">{item.namaBarang}</div>
-                              <div className="font-mono text-xs text-muted-foreground">{item.kodeBarang}</div>
-                            </>
-                          ) : (
-                            <>
-                              <div className="truncate font-medium">{item.masterAset.nama}</div>
-                              <div className="font-mono text-xs text-muted-foreground">{item.masterAset.kodeRegister ?? "—"}</div>
-                              <div className="text-xs text-muted-foreground">NUP {item.masterAset.kodeSiman ?? "—"}</div>
-                            </>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {item.ruang ? (
-                            <>
-                              <div>{item.ruang.nama}</div>
-                              <div className="text-muted-foreground">{item.ruang.bangunanAset.nama}</div>
-                            </>
-                          ) : "—"}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {item.kind === "GROUP"
-                            ? `${item.kondisi} · ${item.jumlah} unit`
-                            : item.grup
-                              ? `${item.grup.kondisi} · ${item.grup.jumlah} unit`
-                              : "—"}
-                          {item.kind === "GROUP" && item.catatanOtomatis && (
-                            <div className="text-muted-foreground">{item.catatanOtomatis}</div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={item.status === "VALIDATED" ? "default" : "secondary"}>
-                            {STATUS_LABEL[item.status] ?? item.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDate(item.updatedAt)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {roomId ? (
-                            <Button asChild size="sm" variant="outline">
-                              <Link to={`/sensus/${roomId}`}><ArrowUpRight /> Buka</Link>
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableEmpty colSpan={6}>Tidak ada item di tab ini.</TableEmpty>
-                )}
-              </TableBody>
-            </Table>
-          )}
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Halaman {page} dari {totalPages} · {data?.total ?? 0} item</span>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>Sebelumnya</Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((current) => current + 1)}>Berikutnya</Button>
-            </div>
-          </div>
+          <DataTable
+            columns={columns}
+            data={data?.items ?? []}
+            getRowId={(item) => `${item.kind}-${item.id}`}
+            page={page}
+            total={data?.total}
+            limit={data?.limit ?? 20}
+            onPageChange={setPage}
+            loading={loading}
+            emptyText="Tidak ada item di tab ini."
+          />
         </CardContent>
       </Card>
     </div>

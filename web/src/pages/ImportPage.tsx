@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { FileSpreadsheet, Loader2, Pencil, Save, Upload, X } from "lucide-react";
 
+import { DataTable, type DataTableColumn } from "@/components/DataTable";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,16 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableEmpty,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Loader } from "@/components/Loader";
 import { api, apiUpload } from "@/lib/api";
 import type {
   ImportBatch,
@@ -306,7 +297,127 @@ export default function ImportPage() {
     }
   };
 
-  const totalPages = preview ? Math.max(1, Math.ceil(preview.total / preview.limit)) : 1;
+  const previewColumns: DataTableColumn<ImportRow>[] = [
+    {
+      key: "nama",
+      header: "Nama",
+      mobilePriority: "title",
+      sortValue: (row) => row.nama,
+      cell: (row) => (
+        <div className="max-w-64">
+          <div className="truncate" title={row.nama}>{row.nama}</div>
+          <div className="text-xs text-muted-foreground">{row.kodeBarang ?? "—"}</div>
+        </div>
+      ),
+    },
+    {
+      key: "baris",
+      header: "Baris",
+      mobileLabel: "Baris",
+      className: "text-xs text-muted-foreground",
+      sortValue: (row) => row.rowNum,
+      cell: (row) => row.rowNum,
+    },
+    {
+      key: "kode",
+      header: "Kode Register / NUP",
+      mobileLabel: "Register / NUP",
+      mobilePriority: "subtitle",
+      cell: (row) => (
+        <div className="font-mono text-xs">
+          <div>{row.kodeRegister ?? "—"}</div>
+          <div className="text-muted-foreground">NUP {row.kodeSiman ?? "—"}</div>
+        </div>
+      ),
+    },
+    {
+      key: "kategori",
+      header: "Kategori",
+      className: "text-xs",
+      sortValue: (row) => row.kategori ?? "",
+      cell: (row) => row.kategori ?? "—",
+    },
+    {
+      key: "validasi",
+      header: "Validasi",
+      mobilePriority: "primary",
+      cell: (row) => (
+        <div className="flex flex-col gap-1">
+          {row.errors.length > 0 ? (
+            <Badge variant="destructive" title={row.errors.join("\n")}>
+              {row.errors.length} error
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Valid</Badge>
+          )}
+          {row.warnings.length > 0 && (
+            <Badge variant="outline" title={row.warnings.join("\n")}>
+              {row.warnings.length} warning
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "aksi",
+      header: "",
+      mobilePriority: "actions",
+      cell: (row) => (
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => startEdit(row)}
+          aria-label={`Edit baris ${row.rowNum}`}
+          className="sm:ml-auto"
+        >
+          <Pencil />
+        </Button>
+      ),
+    },
+  ];
+
+  const batchColumns: DataTableColumn<ImportBatch>[] = [
+    {
+      key: "filename",
+      header: "File",
+      mobilePriority: "title",
+      sortValue: (batch) => batch.filename,
+      cell: (batch) => <span className="font-medium">{batch.filename}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      mobilePriority: "primary",
+      sortValue: (batch) => batch.status,
+      cell: (batch) => <Badge variant={statusVariant(batch.status)}>{batch.status}</Badge>,
+    },
+    {
+      key: "rows",
+      header: "Baris",
+      mobilePriority: "primary",
+      sortValue: (batch) => batch.totalRows,
+      cell: (batch) => batch.totalRows,
+    },
+    {
+      key: "baru",
+      header: "Baru / Update",
+      mobileLabel: "Baru / update",
+      cell: (batch) => `${batch.inserted} / ${batch.updated}`,
+    },
+    {
+      key: "created",
+      header: "Dibuat",
+      className: "whitespace-nowrap text-xs text-muted-foreground",
+      sortValue: (batch) => batch.createdAt,
+      cell: (batch) => formatDate(batch.createdAt),
+    },
+    {
+      key: "expires",
+      header: "Kedaluwarsa",
+      className: "whitespace-nowrap text-xs text-muted-foreground",
+      cell: (batch) => formatDate(batch.expiresAt ?? null),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -342,8 +453,8 @@ export default function ImportPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleUpload} className="flex flex-wrap items-end gap-3">
-            <div className="min-w-60 flex-1 space-y-2">
+          <form onSubmit={handleUpload} className="grid gap-3 sm:flex sm:flex-wrap sm:items-end">
+            <div className="min-w-0 flex-1 space-y-2">
               <Label htmlFor="import-file">File SIMAN (.xlsx / .xls / .csv)</Label>
               <Input
                 id="import-file"
@@ -357,7 +468,7 @@ export default function ImportPage() {
                 </p>
               )}
             </div>
-            <Button type="submit" disabled={uploading || !file}>
+            <Button type="submit" className="w-full sm:w-auto" disabled={uploading || !file}>
               {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
               {uploading ? "Memproses…" : "Upload & Preview"}
             </Button>
@@ -376,7 +487,7 @@ export default function ImportPage() {
                 {preview.meta.backup ? "ada" : "TIDAK ADA"}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
               <Button
                 variant="outline"
                 onClick={() => void loadPreview(batchId, page)}
@@ -470,92 +581,17 @@ export default function ImportPage() {
               </Card>
             )}
 
-            {previewLoading ? (
-              <Loader label="Memuat preview…" />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Baris</TableHead>
-                    <TableHead>Kode Register / NUP</TableHead>
-                    <TableHead>Nama</TableHead>
-                    <TableHead>Kategori</TableHead>
-                    <TableHead>Validasi</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {preview.items.length > 0 ? (
-                    preview.items.map((row) => (
-                      <TableRow key={row.rowNum}>
-                        <TableCell className="text-xs text-muted-foreground">{row.rowNum}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div>{row.kodeRegister ?? "—"}</div>
-                          <div className="text-muted-foreground">NUP {row.kodeSiman ?? "—"}</div>
-                        </TableCell>
-                        <TableCell className="max-w-64">
-                          <div className="truncate" title={row.nama}>{row.nama}</div>
-                          <div className="text-xs text-muted-foreground">{row.kodeBarang ?? "—"}</div>
-                        </TableCell>
-                        <TableCell className="text-xs">{row.kategori ?? "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            {row.errors.length > 0 ? (
-                              <Badge variant="destructive" title={row.errors.join("\n")}>
-                                {row.errors.length} error
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">Valid</Badge>
-                            )}
-                            {row.warnings.length > 0 && (
-                              <Badge variant="outline" title={row.warnings.join("\n")}>
-                                {row.warnings.length} warning
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => startEdit(row)}
-                            aria-label={`Edit baris ${row.rowNum}`}
-                          >
-                            <Pencil />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableEmpty colSpan={6}>Tidak ada baris.</TableEmpty>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                Halaman {page} dari {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || previewLoading}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Sebelumnya
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages || previewLoading}
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  Berikutnya
-                </Button>
-              </div>
-            </div>
+            <DataTable
+              columns={previewColumns}
+              data={preview.items}
+              getRowId={(row) => String(row.rowNum)}
+              page={page}
+              total={preview.total}
+              limit={preview.limit}
+              onPageChange={setPage}
+              loading={previewLoading}
+              emptyText="Tidak ada baris."
+            />
           </CardContent>
         </Card>
       )}
@@ -566,46 +602,13 @@ export default function ImportPage() {
           <CardDescription>10 batch terakhir yang Anda upload.</CardDescription>
         </CardHeader>
         <CardContent>
-          {batchesLoading ? (
-            <Loader label="Memuat riwayat…" />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>File</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Baris</TableHead>
-                  <TableHead>Baru / Update</TableHead>
-                  <TableHead>Dibuat</TableHead>
-                  <TableHead>Kedaluwarsa</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {batches && batches.items.length > 0 ? (
-                  batches.items.map((batch) => (
-                    <TableRow key={batch.id}>
-                      <TableCell className="font-medium">{batch.filename}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(batch.status)}>{batch.status}</Badge>
-                      </TableCell>
-                      <TableCell>{batch.totalRows}</TableCell>
-                      <TableCell>
-                        {batch.inserted} / {batch.updated}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(batch.createdAt)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                        {formatDate(batch.expiresAt ?? null)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableEmpty colSpan={6}>Belum ada batch import.</TableEmpty>
-                )}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            columns={batchColumns}
+            data={batches?.items ?? []}
+            getRowId={(batch) => batch.id}
+            loading={batchesLoading}
+            emptyText="Belum ada batch import."
+          />
         </CardContent>
       </Card>
     </div>

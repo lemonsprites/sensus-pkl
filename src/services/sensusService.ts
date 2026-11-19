@@ -201,6 +201,8 @@ export async function getKandidat(query: KandidatQuery) {
             OR: [
               { nama: { contains: query.q, mode: "insensitive" as const } },
               { kodeBarang: { contains: query.q, mode: "insensitive" as const } },
+              { kodeRegister: { contains: query.q, mode: "insensitive" as const } },
+              { kodeSiman: { contains: query.q, mode: "insensitive" as const } },
             ],
           }
         : {}),

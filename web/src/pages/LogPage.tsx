@@ -73,6 +73,7 @@ export default function LogPage() {
     {
       key: "createdAt",
       header: "Waktu",
+      mobilePriority: "subtitle",
       sortValue: (row) => row.createdAt,
       className: "whitespace-nowrap text-xs",
       cell: (row) => formatDate(row.createdAt),
@@ -80,6 +81,7 @@ export default function LogPage() {
     {
       key: "actor",
       header: "Aktor",
+      mobilePriority: "title",
       sortValue: (row) => row.actorNama,
       cell: (row) => (
         <div>
@@ -91,6 +93,7 @@ export default function LogPage() {
     {
       key: "action",
       header: "Aksi",
+      mobilePriority: "primary",
       sortValue: (row) => row.action,
       cell: (row) => <Badge variant="outline">{ACTION_LABEL[row.action] ?? row.action}</Badge>,
     },
@@ -112,6 +115,7 @@ export default function LogPage() {
     {
       key: "detail",
       header: "",
+      mobilePriority: "actions",
       cell: (row) => (
         <Button size="sm" variant="ghost" onClick={() => setSelected(row)}>Detail</Button>
       ),
@@ -145,7 +149,7 @@ export default function LogPage() {
             onSearchChange={(value) => { setSearch(value); setQ(value); setPage(1); }}
             searchPlaceholder="Cari aktor / ringkasan…"
             filters={
-              <Select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }} className="w-48">
+              <Select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }} className="w-full sm:w-48">
                 <option value="">Semua aksi</option>
                 {ACTIONS.map((value) => <option key={value} value={value}>{ACTION_LABEL[value]}</option>)}
               </Select>
@@ -168,11 +172,11 @@ export default function LogPage() {
           </DialogHeader>
           {selected && (
             <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div><span className="text-muted-foreground">Aktor:</span> {selected.actorNama}</div>
                 <div><span className="text-muted-foreground">Aksi:</span> {ACTION_LABEL[selected.action] ?? selected.action}</div>
                 <div><span className="text-muted-foreground">Entitas:</span> {selected.entityType}</div>
-                <div className="font-mono text-xs"><span className="text-muted-foreground">ID:</span> {selected.entityId ?? "—"}</div>
+                <div className="min-w-0 break-all font-mono text-xs"><span className="text-muted-foreground">ID:</span> {selected.entityId ?? "—"}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Ringkasan</div>
@@ -180,7 +184,7 @@ export default function LogPage() {
               </div>
               <div>
                 <div className="mb-1 text-muted-foreground">Metadata</div>
-                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
                   {JSON.stringify(selected.metadata, null, 2) || "—"}
                 </pre>
               </div>
