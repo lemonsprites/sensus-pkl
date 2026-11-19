@@ -37,7 +37,7 @@ export function BottomNav({ isAdmin }: { isAdmin: boolean }) {
     <>
       <nav
         aria-label="Navigasi utama"
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-safe lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background pb-safe md:hidden"
       >
         <div className="mx-auto grid max-w-md grid-cols-5">
           {primary.map((item) => (
