@@ -126,6 +126,8 @@ export interface RuangHierarki {
   urutan: number;
   jumlahGrup: number;
   jumlahNup: number;
+  /** Jumlah NUP yang sudah berstatus VALIDATED (untuk pewarnaan denah). */
+  jumlahValidated: number;
 }
 
 export interface BangunanHierarki {

@@ -5,6 +5,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import AdminValidationPage from "@/pages/AdminValidationPage";
 import DashboardPage from "@/pages/DashboardPage";
+import DenahPage from "@/pages/DenahPage";
 import HierarchyPage from "@/pages/HierarchyPage";
 import ImportPage from "@/pages/ImportPage";
 import LabelPage from "@/pages/LabelPage";
@@ -28,6 +29,7 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Navigate to="/hierarki" replace />} />
               <Route path="/hierarki" element={<HierarchyPage />} />
+              <Route path="/denah" element={<DenahPage />} />
               <Route path="/sensus/:ruangId" element={<SensusRuangPage />} />
               <Route path="/scan" element={<ScanPage />} />
               <Route path="/monitoring" element={<MonitoringPage />} />

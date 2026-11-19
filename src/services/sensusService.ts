@@ -105,6 +105,7 @@ export async function getHierarchy() {
             lantai: true,
             urutan: true,
             _count: { select: { sensus: true, grup: true } },
+            sensus: { select: { status: true } },
           },
           orderBy: [{ lantai: "asc" }, { urutan: "asc" }, { kode: "asc" }],
         },
@@ -145,6 +146,7 @@ export async function getHierarchy() {
       urutan: room.urutan,
       jumlahGrup: room._count.grup,
       jumlahNup: room._count.sensus,
+      jumlahValidated: room.sensus.filter((row) => row.status === "VALIDATED").length,
     })),
   }));
 

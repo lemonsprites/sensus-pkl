@@ -6,6 +6,7 @@ import {
   FileText,
   History,
   LayoutDashboard,
+  Map,
   Printer,
   ScanLine,
   UserRound,
@@ -26,6 +27,7 @@ export interface NavItemConfig {
 
 export const NAV_ITEMS: NavItemConfig[] = [
   { to: "/hierarki", label: "Hierarki", icon: Building2, primary: true },
+  { to: "/denah", label: "Denah", shortLabel: "Denah", icon: Map },
   { to: "/scan", label: "Scan", icon: ScanLine, primary: true },
   { to: "/monitoring", label: "Monitoring", icon: Activity, primary: true },
   { to: "/laporan", label: "Laporan", shortLabel: "Laporan", icon: FileText, primary: true },
