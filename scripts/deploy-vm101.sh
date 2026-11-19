@@ -169,8 +169,6 @@ RSYNC_ARGS=(
   --exclude=coverage/
   --exclude=.cache/
   --exclude='*.log'
-  --exclude=pnpm-lock.yaml
-  --exclude=pnpm-workspace.yaml
   --exclude=scripts/deploy-vm101.env
 )
 if [[ "$DRY_RUN" == "1" ]]; then

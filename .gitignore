@@ -1,6 +1,10 @@
 # dependencies
 node_modules/
 
+# package manager (proyek memakai npm — jangan commit artefak pnpm)
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
 # builds
 dist/
 dist-ssr/
