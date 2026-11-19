@@ -126,37 +126,43 @@ export function Combobox({
         />
       </div>
       <Command.List className="max-h-64 overflow-y-auto overscroll-contain p-1 sm:max-h-72">
-        {loading ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">Memuat…</div>
-        ) : visibleOptions.length === 0 ? (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
+        {visibleOptions.length === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {loading ? "Memuat…" : emptyText}
+          </div>
         ) : (
-          visibleOptions.map((option) => {
-            const active = option.value === value;
-            return (
-              <Command.Item
-                key={option.value}
-                value={option.value}
-                onSelect={() => handleSelect(option.value)}
-                className={cn(
-                  "flex cursor-pointer items-start gap-2 rounded-md px-2 py-2.5 text-sm outline-none data-[selected=true]:bg-muted",
-                  active && "font-medium",
-                )}
-              >
-                <Check
-                  className={cn("mt-0.5 size-4 shrink-0", active ? "opacity-100" : "opacity-0")}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{option.label}</span>
-                  {option.hint && (
-                    <span className="block truncate text-xs font-normal text-muted-foreground">
-                      {option.hint}
-                    </span>
+          <>
+            {/* Saat pencarian server berjalan, daftar lama tetap tampil agar tidak berkedip. */}
+            {loading && (
+              <div className="px-3 pb-1 pt-2 text-[11px] text-muted-foreground">Memuat…</div>
+            )}
+            {visibleOptions.map((option) => {
+              const active = option.value === value;
+              return (
+                <Command.Item
+                  key={option.value}
+                  value={option.value}
+                  onSelect={() => handleSelect(option.value)}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-2 rounded-md px-2 py-2.5 text-sm outline-none data-[selected=true]:bg-muted",
+                    active && "font-medium",
                   )}
-                </span>
-              </Command.Item>
-            );
-          })
+                >
+                  <Check
+                    className={cn("mt-0.5 size-4 shrink-0", active ? "opacity-100" : "opacity-0")}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{option.label}</span>
+                    {option.hint && (
+                      <span className="block truncate text-xs font-normal text-muted-foreground">
+                        {option.hint}
+                      </span>
+                    )}
+                  </span>
+                </Command.Item>
+              );
+            })}
+          </>
         )}
       </Command.List>
     </Command>

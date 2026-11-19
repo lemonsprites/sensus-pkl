@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, CheckCircle2, Loader2, Paperclip, Pencil, Plus, Save,
-  Search, Trash2, Upload, XCircle,
+  Trash2, Upload, XCircle,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
@@ -477,25 +477,6 @@ export default function SensusRuangPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="cari-kandidat">Cari aset (nama / kode barang / NUP)</Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="cari-kandidat"
-                  value={kandidatQuery}
-                  onChange={(event) => setKandidatQuery(event.target.value)}
-                  placeholder="mis. laptop, 3100xxxx, atau nomor NUP"
-                  className="pl-9"
-                  inputMode="search"
-                  autoComplete="off"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Daftar aset ikut tersaring otomatis saat Anda mengetik.
-              </p>
-            </div>
-
             <div className="space-y-3">
               {rows.map((row, index) => (
                 <div key={row.key} className="space-y-3 rounded-lg border p-3">
@@ -520,11 +501,13 @@ export default function SensusRuangPage() {
                       options={kandidatOptions}
                       value={row.kodeBarang}
                       onValueChange={(value) => selectBarang(row.key, value)}
+                      onSearchChange={setKandidatQuery}
+                      onOpenChange={(open) => {
+                        if (!open) setKandidatQuery("");
+                      }}
                       placeholder="— pilih aset —"
-                      searchPlaceholder="Cari nama / kode / NUP…"
-                      emptyText={
-                        kandidatLoading ? "Memuat aset…" : "Tidak ada aset yang cocok."
-                      }
+                      searchPlaceholder="Cari nama / kode barang / NUP…"
+                      emptyText="Tidak ada aset yang cocok."
                       loading={kandidatLoading}
                     />
                     {row.kodeBarang && (
