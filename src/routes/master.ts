@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 
 import { currentUser, requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/role.js";
@@ -61,6 +62,7 @@ import * as monitoringService from "../services/monitoringService.js";
 import * as reportService from "../services/reportService.js";
 import { buildReportDocx } from "../services/reportDocxService.js";
 import * as sensusService from "../services/sensusService.js";
+import { ApiError } from "../utils/apiError.js";
 
 export const masterRouter = Router();
 masterRouter.use(requireAuth);
@@ -156,6 +158,30 @@ masterRouter.post(
     const { id } = req.validated?.params as DokumenListParam;
     const body = req.validated?.body as DokumenPresignInput;
     res.json({ success: true, data: await dokumenService.presignUpload(id, body) });
+  },
+);
+
+const dokumenUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: dokumenService.MAX_DOKUMEN_BYTES, files: 1 },
+});
+
+/** Jalur cadangan: upload lewat server agar tidak bergantung CORS MinIO. */
+masterRouter.post(
+  "/sensus-grup/:id/dokumen/upload",
+  validate({ params: dokumenListParamSchema }),
+  dokumenUpload.single("file"),
+  async (req, res) => {
+    const { id } = req.validated?.params as DokumenListParam;
+    if (!req.file) throw ApiError.badRequest("File belum diunggah (field 'file')");
+    const jenis = req.body?.jenis === "DOKUMEN" ? "DOKUMEN" : "FOTO";
+    const data = await dokumenService.uploadDirect(currentUser(req).id, id, {
+      jenis,
+      filename: req.file.originalname,
+      contentType: req.file.mimetype,
+      buffer: req.file.buffer,
+    });
+    res.status(201).json({ success: true, data });
   },
 );
 

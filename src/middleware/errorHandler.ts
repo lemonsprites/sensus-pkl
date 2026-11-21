@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
 
-import { config, isProduction } from "../lib/config.js";
+import { isProduction } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -57,7 +57,7 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     const multerCode = (error as { code?: unknown }).code;
     apiError =
       multerCode === "LIMIT_FILE_SIZE"
-        ? ApiError.badRequest(`Ukuran file melebihi ${config.IMPORT_MAX_SIZE_MB} MB`)
+        ? ApiError.badRequest("Ukuran file terlalu besar")
         : ApiError.badRequest("Upload file gagal");
   } else if (error instanceof Error && error.name === "ZodError") {
     apiError = ApiError.badRequest("Data yang dikirim tidak valid");

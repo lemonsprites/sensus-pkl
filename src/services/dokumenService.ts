@@ -10,16 +10,46 @@ import { logActivity } from "./activityService.js";
 import type { DokumenConfirmInput, DokumenPresignInput } from "../schemas/dokumen.js";
 import { ApiError } from "../utils/apiError.js";
 
-const MAX_BYTES = 15 * 1024 * 1024;
+export const MAX_DOKUMEN_BYTES = 15 * 1024 * 1024;
 const PRESIGN_SECONDS = 15 * 60;
 type Jenis = "FOTO" | "DOKUMEN";
+
+/** Ekstensi dokumen pendukung yang diterima (selain gambar & PDF). */
+const DOKUMEN_EXTENSIONS = new Set([
+  "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "tif", "tiff",
+  "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp",
+  "csv", "txt", "rtf", "zip", "rar", "7z", "tar", "gz",
+]);
+
+/** MIME fallback saat browser mengirim application/octet-stream atau kosong. */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp",
+  gif: "image/gif", bmp: "image/bmp", heic: "image/heic", heif: "image/heif",
+  tif: "image/tiff", tiff: "image/tiff", pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odt: "application/vnd.oasis.opendocument.text",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odp: "application/vnd.oasis.opendocument.presentation",
+  csv: "text/csv", txt: "text/plain", rtf: "application/rtf",
+  zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed",
+  tar: "application/x-tar", gz: "application/gzip",
+};
+
+function extensionOf(filename: string): string {
+  return filename.split(".").pop()?.toLowerCase() ?? "";
+}
 
 function bucketFor(jenis: Jenis): string {
   return jenis === "FOTO" ? BUCKETS.foto : BUCKETS.private;
 }
 
 function extensionFor(filename: string, contentType: string): string {
-  const fromName = filename.split(".").pop()?.toLowerCase() ?? "";
+  const fromName = extensionOf(filename);
   if (/^[a-z0-9]{1,5}$/.test(fromName)) return fromName;
   if (contentType === "image/png") return "png";
   if (contentType === "image/webp") return "webp";
@@ -27,13 +57,28 @@ function extensionFor(filename: string, contentType: string): string {
   return "jpg";
 }
 
-function validateContent(jenis: Jenis, contentType: string): void {
+function normalizeContentType(contentType: string | undefined, filename: string): string {
+  const type = (contentType ?? "").trim().toLowerCase();
+  if (type && type !== "application/octet-stream") return type;
+  return MIME_BY_EXTENSION[extensionOf(filename)] ?? type ?? "application/octet-stream";
+}
+
+function validateContent(jenis: Jenis, contentType: string, filename = ""): void {
   const type = contentType.toLowerCase();
   if (jenis === "FOTO" && !type.startsWith("image/")) {
     throw ApiError.badRequest("Foto harus berupa file gambar (JPEG/PNG/WebP)");
   }
-  if (jenis === "DOKUMEN" && !(type.startsWith("image/") || type === "application/pdf")) {
-    throw ApiError.badRequest("Dokumen harus berupa gambar atau PDF");
+  if (jenis === "DOKUMEN") {
+    const knownMime =
+      type.startsWith("image/") ||
+      /pdf|msword|ms-excel|ms-powerpoint|officedocument|opendocument|text\/|csv|zip|rar|7z|gzip|tar/.test(type);
+    const knownExtension = DOKUMEN_EXTENSIONS.has(extensionOf(filename));
+    const genericType = !type || type === "application/octet-stream" || type === "binary/octet-stream";
+    if (!knownMime && !(genericType && knownExtension)) {
+      throw ApiError.badRequest(
+        "Dokumen harus berupa gambar, PDF, Office (Word/Excel/PowerPoint), atau arsip",
+      );
+    }
   }
 }
 
@@ -155,6 +200,52 @@ export async function presignUpload(grupId: string, input: DokumenPresignInput) 
   };
 }
 
+/** Simpan metadata + thumbnail setelah objek dipastikan ada di MinIO. */
+async function finalizeUpload(
+  actorId: string,
+  group: { id: string; kodeBarang: string; namaBarang: string },
+  jenis: Jenis,
+  bucket: string,
+  objectKey: string,
+  contentType: string,
+  size: number,
+) {
+  const thumbKey =
+    jenis === "FOTO" && contentType.startsWith("image/")
+      ? await makeThumbnail(group.id, bucket, objectKey)
+      : null;
+
+  const created = await prisma.sensusDokumen.create({
+    data: {
+      grupId: group.id,
+      jenis,
+      bucket,
+      objectKey,
+      thumbKey,
+      contentType,
+      size,
+      uploadedById: actorId,
+    },
+    select: {
+      id: true, jenis: true, bucket: true, objectKey: true, thumbKey: true,
+      contentType: true, size: true, createdAt: true,
+      uploadedBy: { select: { id: true, nama: true } },
+    },
+  });
+
+  await syncDocsComplete(group.id);
+  const updated = await getGrup(group.id);
+  await logActivity({
+    actorId,
+    action: "DOC_UPLOAD",
+    entityType: "SENSUS_GRUP",
+    entityId: group.id,
+    summary: `Unggah ${jenis} ${group.namaBarang} (${group.kodeBarang})`,
+    metadata: { dokumenId: created.id, objectKey: created.objectKey, jenis: created.jenis },
+  });
+  return { dokumen: await serialize(created), sensusStatus: updated.status };
+}
+
 export async function confirmUpload(actorId: string, grupId: string, input: DokumenConfirmInput) {
   const group = await getGrup(grupId);
   const bucket = bucketFor(input.jenis);
@@ -181,44 +272,55 @@ export async function confirmUpload(actorId: string, grupId: string, input: Doku
   } catch {
     throw ApiError.badRequest("File belum ditemukan di MinIO. Upload ke presigned URL dulu.");
   }
-  if (stat.size > MAX_BYTES) throw ApiError.badRequest("Ukuran file maksimal 15 MB");
+  if (stat.size > MAX_DOKUMEN_BYTES) throw ApiError.badRequest("Ukuran file maksimal 15 MB");
 
-  const contentType = input.contentType ?? stat.metaData?.["content-type"] ?? "application/octet-stream";
-  validateContent(input.jenis, contentType);
-  const thumbKey =
-    input.jenis === "FOTO" && contentType.startsWith("image/")
-      ? await makeThumbnail(group.id, bucket, input.objectKey)
-      : null;
+  const contentType = normalizeContentType(
+    input.contentType ?? stat.metaData?.["content-type"],
+    input.objectKey,
+  );
+  validateContent(input.jenis, contentType, input.objectKey);
 
-  const created = await prisma.sensusDokumen.create({
-    data: {
-      grupId: group.id,
-      jenis: input.jenis,
-      bucket,
-      objectKey: input.objectKey,
-      thumbKey,
-      contentType,
-      size: stat.size,
-      uploadedById: actorId,
-    },
-    select: {
-      id: true, jenis: true, bucket: true, objectKey: true, thumbKey: true,
-      contentType: true, size: true, createdAt: true,
-      uploadedBy: { select: { id: true, nama: true } },
-    },
+  return finalizeUpload(actorId, group, input.jenis, bucket, input.objectKey, contentType, stat.size);
+}
+
+export interface DirectUploadInput {
+  jenis: Jenis;
+  filename: string;
+  contentType?: string;
+  buffer: Buffer;
+}
+
+/**
+ * Upload via server (multipart). Tidak bergantung CORS MinIO di browser,
+ * jadi tetap berhasil meski presigned PUT diblokir CORS/DNS publik.
+ */
+export async function uploadDirect(actorId: string, grupId: string, input: DirectUploadInput) {
+  const group = await getGrup(grupId);
+  if (!input.buffer || input.buffer.length === 0) {
+    throw ApiError.badRequest("File kosong atau gagal dibaca");
+  }
+  if (input.buffer.length > MAX_DOKUMEN_BYTES) {
+    throw ApiError.badRequest("Ukuran file maksimal 15 MB");
+  }
+
+  const contentType = normalizeContentType(input.contentType, input.filename);
+  validateContent(input.jenis, contentType, input.filename);
+
+  const bucket = bucketFor(input.jenis);
+  const objectKey = `grup/${group.id}/${randomUUID()}.${extensionFor(input.filename, contentType)}`;
+  await minio.putObject(bucket, objectKey, input.buffer, input.buffer.length, {
+    "Content-Type": contentType,
   });
 
-  await syncDocsComplete(group.id);
-  const updated = await getGrup(group.id);
-  await logActivity({
+  return finalizeUpload(
     actorId,
-    action: "DOC_UPLOAD",
-    entityType: "SENSUS_GRUP",
-    entityId: group.id,
-    summary: `Unggah ${input.jenis} ${group.namaBarang} (${group.kodeBarang})`,
-    metadata: { dokumenId: created.id, objectKey: created.objectKey, jenis: created.jenis },
-  });
-  return { dokumen: await serialize(created), sensusStatus: updated.status };
+    group,
+    input.jenis,
+    bucket,
+    objectKey,
+    contentType,
+    input.buffer.length,
+  );
 }
 
 export async function listDokumen(grupId: string) {

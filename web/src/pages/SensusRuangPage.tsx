@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, CheckCircle2, Loader2, Paperclip, Pencil, Plus, Save,
-  Trash2, Upload, XCircle,
+  ArrowLeft, CheckCircle2, FileText, Loader2, Paperclip, Pencil, Plus, Save,
+  Trash2, Upload, UploadCloud, X, XCircle,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
@@ -19,7 +19,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Loader } from "@/components/Loader";
-import { api } from "@/lib/api";
+import { api, apiUpload } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type {
   DokumenItem, DokumenListResponse, KandidatItem, KandidatResponse, Kondisi,
   RuangData, Sensus, SensusGrup, SensusStatus,
@@ -32,6 +33,14 @@ const STATUS_LABEL: Record<SensusStatus, string> = {
 const KONDISI_LABEL: Record<Kondisi, string> = {
   BAIK: "Baik", RUSAK_RINGAN: "Rusak ringan", RUSAK_BERAT: "Rusak berat",
 };
+
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 interface FormRow {
   key: string;
@@ -89,6 +98,9 @@ export default function SensusRuangPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadJenis, setUploadJenis] = useState<"FOTO" | "DOKUMEN">("FOTO");
   const [uploading, setUploading] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     if (!ruangId) return;
@@ -266,25 +278,79 @@ export default function SensusRuangPage() {
     }
   };
 
+  const applyFile = (file: File | null) => {
+    setDocsError("");
+    if (!file) {
+      setUploadFile(null);
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadFile(null);
+      setDocsError("Ukuran file maksimal 15 MB");
+      return;
+    }
+    if (uploadJenis === "FOTO" && !file.type.startsWith("image/")) {
+      setUploadFile(null);
+      setDocsError("Jenis Foto hanya menerima file gambar");
+      return;
+    }
+    setUploadFile(file);
+  };
+
+  const closeUpload = () => {
+    setUploadOpen(false);
+    setDragActive(false);
+    setUploadFile(null);
+  };
+
   const uploadDoc = async () => {
     if (!docsGroup || !uploadFile) return;
     setUploading(true);
     setDocsError("");
+    const contentType = uploadFile.type || "application/octet-stream";
     try {
-      const contentType = uploadFile.type || "application/octet-stream";
-      const presign = await api<{ uploadUrl: string; objectKey: string }>(
-        `/sensus-grup/${docsGroup.id}/dokumen/presign`,
-        { method: "POST", body: { filename: uploadFile.name, contentType, jenis: uploadJenis } },
-      );
-      const put = await fetch(presign.uploadUrl, {
-        method: "PUT", headers: { "Content-Type": contentType }, body: uploadFile,
-      });
-      if (!put.ok) throw new Error(`Upload ke MinIO gagal (HTTP ${put.status})`);
-      await api(`/sensus-grup/${docsGroup.id}/dokumen/confirm`, {
-        method: "POST",
-        body: { objectKey: presign.objectKey, jenis: uploadJenis, contentType, size: uploadFile.size },
-      });
+      if (uploadFile.size > MAX_UPLOAD_BYTES) {
+        throw new Error("Ukuran file maksimal 15 MB");
+      }
+
+      let done = false;
+      try {
+        const presign = await api<{ uploadUrl: string; objectKey: string }>(
+          `/sensus-grup/${docsGroup.id}/dokumen/presign`,
+          { method: "POST", body: { filename: uploadFile.name, contentType, jenis: uploadJenis } },
+        );
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 60_000);
+        try {
+          const put = await fetch(presign.uploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": contentType },
+            body: uploadFile,
+            signal: controller.signal,
+          });
+          if (!put.ok) throw new Error(`Upload langsung gagal (HTTP ${put.status})`);
+        } finally {
+          window.clearTimeout(timer);
+        }
+        await api(`/sensus-grup/${docsGroup.id}/dokumen/confirm`, {
+          method: "POST",
+          body: { objectKey: presign.objectKey, jenis: uploadJenis, contentType, size: uploadFile.size },
+        });
+        done = true;
+      } catch {
+        done = false;
+      }
+
+      // Fallback: unggah lewat server (tidak butuh CORS bucket MinIO).
+      if (!done) {
+        const form = new FormData();
+        form.append("file", uploadFile);
+        form.append("jenis", uploadJenis);
+        await apiUpload(`/sensus-grup/${docsGroup.id}/dokumen/upload`, form);
+      }
+
       setUploadFile(null);
+      setUploadOpen(false);
       await loadDocs(docsGroup);
       await load();
     } catch (cause) {
@@ -591,7 +657,15 @@ export default function SensusRuangPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(docsGroup)} onOpenChange={(open) => !open && setDocsGroup(null)}>
+      <Dialog
+        open={Boolean(docsGroup)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDocsGroup(null);
+            closeUpload();
+          }
+        }}
+      >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Dokumen: {docsGroup?.namaBarang} ({docsGroup?.jumlah} unit)</DialogTitle>
@@ -599,22 +673,15 @@ export default function SensusRuangPage() {
           </DialogHeader>
           <div className="space-y-4">
             {docsError && <Alert variant="destructive"><AlertDescription>{docsError}</AlertDescription></Alert>}
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-0 flex-1 basis-full space-y-2 sm:basis-auto">
-                <Label htmlFor="grup-file">File (foto/PDF, maks 15 MB)</Label>
-                <Input id="grup-file" type="file" accept="image/*,application/pdf" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} />
-              </div>
-              <div className="w-full space-y-2 sm:w-40">
-                <Label htmlFor="grup-jenis">Jenis</Label>
-                <Select id="grup-jenis" value={uploadJenis} onChange={(event) => setUploadJenis(event.target.value as "FOTO" | "DOKUMEN")}>
-                  <option value="FOTO">Foto</option>
-                  <option value="DOKUMEN">Dokumen pendukung</option>
-                </Select>
-              </div>
-              <Button className="w-full sm:w-auto" onClick={() => void uploadDoc()} disabled={!uploadFile || uploading}>
-                {uploading ? <Loader2 className="animate-spin" /> : <Upload />} Upload
-              </Button>
-            </div>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => {
+                setDocsError("");
+                setUploadOpen(true);
+              }}
+            >
+              <Plus /> Tambah dokumen
+            </Button>
             {docs && (
               <div className="flex items-center gap-2 text-sm">
                 <Badge variant={docs.docsComplete ? "default" : "outline"}>{docs.docsComplete ? "Dokumen lengkap" : "Belum lengkap"}</Badge>
@@ -642,6 +709,104 @@ export default function SensusRuangPage() {
                 ))}
               </div>
             ) : <p className="text-sm text-muted-foreground">Belum ada dokumen.</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={uploadOpen && Boolean(docsGroup)}
+        onOpenChange={(open) => {
+          if (!open) closeUpload();
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Tambah dokumen</DialogTitle>
+            <DialogDescription>
+              {docsGroup ? `${docsGroup.namaBarang} (${docsGroup.kodeBarang})` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {docsError && <Alert variant="destructive"><AlertDescription>{docsError}</AlertDescription></Alert>}
+
+            <input
+              ref={fileInputRef}
+              id="grup-file"
+              type="file"
+              className="sr-only"
+              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.rtf,.zip,.rar,.7z"
+              onChange={(event) => {
+                applyFile(event.target.files?.[0] ?? null);
+                event.target.value = "";
+              }}
+            />
+
+            {uploadFile ? (
+              <div className="flex items-center gap-3 rounded-lg border p-3 text-sm">
+                <FileText className="size-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{uploadFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{formatBytes(uploadFile.size)}</p>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => applyFile(null)} aria-label="Hapus file">
+                  <X />
+                </Button>
+              </div>
+            ) : (
+              <label
+                htmlFor="grup-file"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragActive(false);
+                  applyFile(event.dataTransfer.files?.[0] ?? null);
+                }}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-6 text-center transition-colors",
+                  dragActive ? "border-primary bg-primary/5" : "border-input hover:border-primary/60 hover:bg-muted/40",
+                )}
+              >
+                <UploadCloud className="size-6 text-muted-foreground" />
+                <span className="text-sm font-medium">Tarik & lepas file di sini</span>
+                <span className="text-xs text-muted-foreground">
+                  atau klik untuk memilih · foto/PDF/Office/arsip · maks 15 MB
+                </span>
+              </label>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="grup-jenis">Jenis</Label>
+              <Select
+                id="grup-jenis"
+                value={uploadJenis}
+                onChange={(event) => {
+                  const next = event.target.value as "FOTO" | "DOKUMEN";
+                  setUploadJenis(next);
+                  setDocsError("");
+                  if (next === "FOTO" && uploadFile && !uploadFile.type.startsWith("image/")) {
+                    setUploadFile(null);
+                    setDocsError("Jenis Foto hanya menerima file gambar");
+                  }
+                }}
+              >
+                <option value="FOTO">Foto</option>
+                <option value="DOKUMEN">Dokumen pendukung</option>
+              </Select>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={closeUpload} disabled={uploading}>
+                Batal
+              </Button>
+              <Button onClick={() => void uploadDoc()} disabled={!uploadFile || uploading}>
+                {uploading ? <Loader2 className="animate-spin" /> : <Upload />}
+                {uploading ? "Mengunggah…" : "Upload"}
+              </Button>
+            </DialogFooter>
           </div>
         </DialogContent>
       </Dialog>

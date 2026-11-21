@@ -68,7 +68,9 @@ Policy service account minimal:
 - foto/thumb/private: `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`
 - staging: `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`
 
-**CORS bucket foto/private** wajib mengizinkan `PUT` dari origin aplikasi untuk presigned upload (method `PUT`, header `Content-Type`, expose `ETag`). Tanpa CORS, browser akan gagal upload meski URL valid.
+**CORS bucket foto/private** sebaiknya mengizinkan `PUT` dari origin aplikasi untuk presigned upload (method `PUT`, header `Content-Type`, expose `ETag`).
+
+Upload dokumen tetap berhasil walau CORS bucket belum diatur: UI mencoba presigned `PUT` lebih dulu, lalu otomatis fallback ke `POST /api/sensus-grup/:id/dokumen/upload` (multipart lewat server → MinIO). Batas dokumen 15 MB; `client_max_body_size` nginx disetel `60m` agar upload import SIMAN (maks 50 MB) dan dokumen tidak kena 413.
 
 ## 5. Import SIMAN (M3)
 

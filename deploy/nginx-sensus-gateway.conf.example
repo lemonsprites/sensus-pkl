@@ -5,7 +5,8 @@ server {
     listen [::]:80;
     server_name sensus.matsanesacis.sch.id;
 
-    client_max_body_size 20m;
+    # Upload import SIMAN maks 50 MB (IMPORT_MAX_SIZE_MB) + overhead multipart.
+    client_max_body_size 60m;
 
     location / {
         proxy_pass http://192.168.100.252:3100;
